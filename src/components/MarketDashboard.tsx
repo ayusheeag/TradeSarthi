@@ -22,8 +22,13 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
     setLoading(true);
     setError("");
     try {
-      const symbols = WATCHLIST[cat] || [];
-      const data = await dataAdapter.getWatchlistStats(symbols, source);
+      let data: any[] = [];
+      if (cat === "INDIAN_EQUITY") {
+        data = await dataAdapter.getNSEGainersLosers();
+      } else {
+        const symbols = WATCHLIST[cat] || [];
+        data = await dataAdapter.getWatchlistStats(symbols, source);
+      }
       setStats(data);
 
       // Fetch suggestions using the live stats
@@ -44,8 +49,25 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
   const gainers = useMemo(() => [...stats].sort((a, b) => b.changePct - a.changePct).slice(0, 3), [stats]);
   const losers = useMemo(() => [...stats].sort((a, b) => a.changePct - b.changePct).slice(0, 3), [stats]);
 
-  const lastActiveDate = useMemo(() => stats.length > 0 ? new Date(stats[0].ohlc[stats[0].ohlc.length - 1].time).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "", [stats]);
-  const isMarketOpen = useMemo(() => stats.length > 0 && (Date.now() - stats[0].ohlc[stats[0].ohlc.length - 1].time) < 86400000, [stats]);
+  const lastActiveDate = useMemo(() => {
+    if (stats.length === 0) return "";
+    const lastOhlc = stats[0].ohlc;
+    if (!lastOhlc || lastOhlc.length === 0) return new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    return new Date(lastOhlc[lastOhlc.length - 1].time).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  }, [stats]);
+
+  const isMarketOpen = useMemo(() => {
+    if (stats.length === 0) return false;
+    const lastOhlc = stats[0].ohlc;
+    if (!lastOhlc || lastOhlc.length === 0) {
+      const now = new Date();
+      const hour = now.getHours();
+      const day = now.getDay();
+      // Indian market hours: 9:15 AM to 3:30 PM, Mon-Fri
+      return day >= 1 && day <= 5 && (hour > 9 || (hour === 9 && now.getMinutes() >= 15)) && (hour < 15 || (hour === 15 && now.getMinutes() <= 30));
+    }
+    return (Date.now() - lastOhlc[lastOhlc.length - 1].time) < 86400000;
+  }, [stats]);
 
   if (loading) {
     return (
@@ -81,7 +103,13 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
             {gainers.map((s, i) => (
               <button 
                 key={s.symbol}
-                onClick={() => onPick({ symbol: s.symbol, id: s.symbol, exchange: "" })}
+                onClick={() => onPick({ 
+                  symbol: s.symbol, 
+                  id: s.id || s.symbol, 
+                  exchange: s.exchange || "NSE",
+                  exchange_segment: s.exchange_segment,
+                  name: s.name
+                })}
                 className="w-full flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-bull/5 border border-bull/10 hover:bg-bull/10 transition-all active:scale-[0.98]"
               >
                 <div className="flex items-center gap-2 sm:gap-3">
@@ -117,7 +145,13 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
             {losers.map((s, i) => (
               <button 
                 key={s.symbol}
-                onClick={() => onPick({ symbol: s.symbol, id: s.symbol, exchange: "" })}
+                onClick={() => onPick({ 
+                  symbol: s.symbol, 
+                  id: s.id || s.symbol, 
+                  exchange: s.exchange || "NSE",
+                  exchange_segment: s.exchange_segment,
+                  name: s.name
+                })}
                 className="w-full flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-bear/5 border border-bear/10 hover:bg-bear/10 transition-all active:scale-[0.98]"
               >
                 <div className="flex items-center gap-2 sm:gap-3">
@@ -169,7 +203,12 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
                   </div>
                 </div>
                 <button 
-                  onClick={() => onPick({ symbol: t.symbol, id: t.symbol, exchange: "" })}
+                  onClick={() => onPick({ 
+                    symbol: t.symbol, 
+                    id: t.id || t.symbol, 
+                    exchange: t.exchange || "NSE",
+                    name: t.symbol
+                  })}
                   className="text-accent text-[9px] sm:text-[10px] font-bold uppercase tracking-widest flex items-center gap-1"
                 >
                   Analyze <ChevronRight size={12} />

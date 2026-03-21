@@ -10,8 +10,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { Settings, Search, X, TrendingUp, TrendingDown, Activity, Layers, Target, BarChart3, ChevronRight, Info, RefreshCw } from "lucide-react";
 
 export default function App() {
-  const [cat, setCat] = useState<keyof typeof CATS>("CRYPTO");
-  const [ex, setEx] = useState("Binance");
+  const [cat, setCat] = useState<keyof typeof CATS>("INDIAN_EQUITY");
+  const [ex, setEx] = useState("NSE");
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Ticker[]>([]);
   const [ticker, setTicker] = useState<Ticker | null>(null);
@@ -24,6 +24,11 @@ export default function App() {
   const dbRef = useRef<any>(null);
 
   const C = CATS[cat];
+  
+  // Pre-load
+  useEffect(() => {
+    dataAdapter.preLoad();
+  }, []);
 
   // Search
   useEffect(() => {

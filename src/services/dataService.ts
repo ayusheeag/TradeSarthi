@@ -94,17 +94,33 @@ export const dataAdapter = {
     search: async (q: string, ex: string) => {
       if (ex === "COMEX") return dataAdapter.YAHOO.search(q, ex);
       
-      // Use Yahoo for fast, reliable search
+      const insts = await dhanInstruments();
+      const l = q.toLowerCase();
+      const segMap: any = { "NSE": "NSE_EQ", "BSE": "BSE_EQ", "MCX": "MCX_COMM" };
+      const targetSeg = segMap[ex] || "NSE_EQ";
+
+      // If we have cache, search it directly for ultra-fast results
+      if (insts && insts.length > 0) {
+        const localResults = insts
+          .filter(i => i.exchange_segment === targetSeg && (i.trading_symbol.toLowerCase().includes(l) || i.short_name.toLowerCase().includes(l)))
+          .slice(0, 15)
+          .map(i => ({
+            symbol: i.trading_symbol + (ex === "NSE" ? ".NS" : ex === "BSE" ? ".BO" : ""),
+            name: i.short_name,
+            exchange: ex,
+            id: i.security_id,
+            security_id: i.security_id,
+            exchange_segment: i.exchange_segment
+          }));
+        
+        if (localResults.length > 0) return localResults;
+      }
+
+      // Fallback to Yahoo if no local results or cache not ready
       const yResults = await dataAdapter.YAHOO.search(q, ex);
       
-      // Try to enrich with Dhan IDs if list is available
-      const insts = await dhanInstruments();
       if (insts && insts.length > 0) {
-        const segMap: any = { "NSE": "NSE_EQ", "BSE": "BSE_EQ", "MCX": "MCX_COMM" };
-        const targetSeg = segMap[ex] || "NSE_EQ";
-        
         return yResults.map(y => {
-          // Yahoo symbols for India end in .NS or .BO
           const sym = y.symbol.split(".")[0].toUpperCase();
           const d = insts.find(i => i.trading_symbol === sym && i.exchange_segment === targetSeg);
           if (d) {
@@ -275,6 +291,40 @@ export const dataAdapter = {
         return (await r.json()).map((k: any) => ({ time: k[0], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] }));
       } catch { return null; }
     },
+  },
+  getNSEGainersLosers: async () => {
+    try {
+      const r = await fetch(`/api/nse/nifty50`);
+      if (!r.ok) throw 0;
+      const d = await r.json();
+      
+      const insts = await dhanInstruments();
+      
+      // NSE API returns { data: [...], ... } where data[0] is the index itself
+      return (d.data || []).slice(1).map((x: any) => {
+        const symbol = x.symbol;
+        const dhanInst = insts?.find(i => i.trading_symbol === symbol && i.exchange_segment === "NSE_EQ");
+        
+        return {
+          symbol: symbol + ".NS",
+          price: Number(x.lastPrice),
+          change: Number(x.change),
+          changePct: Number(x.pChange),
+          name: x.symbol,
+          id: dhanInst ? dhanInst.security_id : symbol + ".NS",
+          exchange_segment: dhanInst ? dhanInst.exchange_segment : "NSE_EQ",
+          ohlc: []
+        };
+      });
+    } catch (error) { 
+      console.error("getNSEGainersLosers error:", error);
+      return []; 
+    }
+  },
+  preLoad: async () => {
+    // Background pre-loading of instruments
+    dhanInstruments();
+    bnSymbols();
   },
   getWatchlistStats: async (symbols: string[], source: string) => {
     const results = await Promise.all(symbols.map(async (s) => {
