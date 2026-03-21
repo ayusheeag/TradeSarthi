@@ -6,7 +6,8 @@ import { TA } from "./services/taService";
 import { CandleChart } from "./components/CandleChart";
 import { Gauge, Badge, Dot, Logo } from "./components/UI";
 import { motion, AnimatePresence } from "motion/react";
-import { Settings, Search, X, TrendingUp, TrendingDown, Activity, Layers, Target, BarChart3, ChevronRight, Info, RefreshCw } from "lucide-react";
+import { Settings, Search, X, TrendingUp, TrendingDown, Activity, Layers, Target, BarChart3, ChevronRight, Info, RefreshCw, Zap } from "lucide-react";
+import { lcService, LCSocialData } from "./services/lunarcrushService";
 
 export default function App() {
   const [cat, setCat] = useState<keyof typeof CATS>("CRYPTO");
@@ -20,6 +21,7 @@ export default function App() {
   const [showSearch, setShowSearch] = useState(false);
   const [tab, setTab] = useState("overview");
   const [ds, setDs] = useState<{ live: boolean; src: string; n: number; why?: string } | null>(null);
+  const [social, setSocial] = useState<LCSocialData | null>(null);
   const dbRef = useRef<any>(null);
 
   const C = CATS[cat];
@@ -42,6 +44,7 @@ export default function App() {
     setTicker(null);
     setAnalysis(null);
     setDs(null);
+    setSocial(null);
   }, [cat]);
 
   const analyze = useCallback(async (tk: Ticker, useTf?: string) => {
@@ -72,7 +75,9 @@ export default function App() {
     setQ(t.symbol);
     setShowSearch(false);
     setResults([]);
+    setSocial(null);
     analyze(t);
+    lcService.getSocial(t.symbol, cat).then(setSocial);
   };
 
   useEffect(() => {
@@ -315,7 +320,8 @@ export default function App() {
                 { id: "classic", l: "Classic", icon: BarChart3 },
                 { id: "smc", l: "SMC/ICT", icon: Layers },
                 { id: "levels", l: "Levels", icon: Target },
-                { id: "patterns", l: "Patterns", icon: TrendingUp }
+                { id: "patterns", l: "Patterns", icon: TrendingUp },
+                { id: "social", l: "Social", icon: Zap }
               ].map(t => (
                 <button
                   key={t.id}
@@ -503,6 +509,73 @@ export default function App() {
                       )}
                     </div>
                   </div>
+                </motion.div>
+              )}
+
+              {tab === "social" && (
+                <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
+                  {social ? (
+                    <>
+                      <div className="card">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-6">Social Intelligence · LunarCrush</div>
+                        <div className="grid grid-cols-2 gap-4">
+                          {[
+                            { l: "Galaxy Score", v: social.galaxyScore != null ? `${social.galaxyScore}/100` : "—", color: social.galaxyScore != null && social.galaxyScore >= 60 ? "text-bull" : social.galaxyScore != null && social.galaxyScore < 40 ? "text-bear" : "text-amber-400" },
+                            { l: "Alt Rank", v: social.altRank != null ? `#${social.altRank.toLocaleString()}` : "—", color: "text-white" },
+                            { l: "Sentiment", v: social.sentiment != null ? `${social.sentiment.toFixed(1)}%` : "—", color: social.sentiment != null && social.sentiment >= 60 ? "text-bull" : social.sentiment != null && social.sentiment < 40 ? "text-bear" : "text-amber-400" },
+                            { l: "Social Dom.", v: social.socialDominance != null ? `${social.socialDominance.toFixed(2)}%` : "—", color: "text-white" },
+                          ].map(item => (
+                            <div key={item.l} className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                              <div className="text-[9px] text-white/20 font-bold uppercase tracking-widest mb-2">{item.l}</div>
+                              <div className={`text-xl font-bold font-mono ${item.color}`}>{item.v}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="card">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-6">Social Activity</div>
+                        <div className="space-y-4">
+                          {[
+                            { l: "Total Engagements", v: social.interactions != null ? social.interactions.toLocaleString() : "—" },
+                            { l: "Active Mentions", v: social.postsActive != null ? social.postsActive.toLocaleString() : "—" },
+                            { l: "Unique Creators", v: social.contributorsActive != null ? social.contributorsActive.toLocaleString() : "—" },
+                          ].map(item => (
+                            <div key={item.l} className="flex justify-between items-center">
+                              <span className="text-xs text-white/40">{item.l}</span>
+                              <span className="text-sm font-bold font-mono">{item.v}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {social.sentiment != null && (
+                        <div className="card">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-4">Community Sentiment</div>
+                          <div className="flex items-center gap-4 mb-2">
+                            <div className="flex-1 h-3 rounded-full bg-white/5 overflow-hidden flex">
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${social.sentiment}%` }}
+                                className="h-full bg-bull shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+                              />
+                              <div className="flex-1 bg-bear/20" />
+                            </div>
+                          </div>
+                          <div className="flex justify-between text-[10px] font-bold font-mono">
+                            <span className="text-bull">BULLISH {social.sentiment.toFixed(1)}%</span>
+                            <span className="text-bear">BEARISH {(100 - social.sentiment).toFixed(1)}%</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="card text-center py-16">
+                      <Zap size={32} className="mx-auto mb-4 text-white/10" />
+                      <div className="text-sm font-bold text-white/20 mb-2">No Social Data</div>
+                      <div className="text-xs text-white/10">LunarCrush data unavailable for this asset.<br />Ensure LUNARCRUSH_API_KEY is configured.</div>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </div>

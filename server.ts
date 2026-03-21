@@ -60,6 +60,27 @@ async function startServer() {
     }
   });
 
+  // Proxy for LunarCrush
+  app.get("/api/lunarcrush/*", async (req, res) => {
+    const lcPath = (req.params as any)[0];
+    const apiKey = process.env.LUNARCRUSH_API_KEY;
+    if (!apiKey) return res.status(401).json({ error: "LunarCrush API key not configured" });
+
+    const queryParams = new URLSearchParams(req.query as any);
+    const qs = queryParams.toString();
+    const url = `https://lunarcrush.com/api4/public/${lcPath}${qs ? "?" + qs : ""}`;
+
+    try {
+      const response = await fetch(url, {
+        headers: { "Authorization": `Bearer ${apiKey}` }
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch from LunarCrush" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
