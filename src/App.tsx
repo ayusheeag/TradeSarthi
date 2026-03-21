@@ -22,6 +22,33 @@ export default function App() {
   const [showSearch, setShowSearch] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [tab, setTab] = useState("overview");
+
+  // Intersection Observer for active tab highlighting
+  useEffect(() => {
+    if (!ticker || !analysis) return;
+    
+    const options = {
+      root: null,
+      rootMargin: '-100px 0px -50% 0px',
+      threshold: 0.3
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          setTab(entry.target.id);
+        }
+      });
+    }, options);
+
+    const sectionIds = ["overview", "classic", "smc", "levels", "patterns"];
+    sectionIds.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, [ticker, analysis]);
   const [ds, setDs] = useState<{ live: boolean; src: string; n: number; why?: string } | null>(null);
   const dbRef = useRef<any>(null);
 
@@ -256,13 +283,28 @@ export default function App() {
             <div className="flex w-full bg-white/5 p-1 rounded-xl border border-white/5">
               {[
                 { id: "overview", icon: Activity, label: "Overview" },
+                { id: "classic", icon: BarChart3, label: "Classic" },
                 { id: "smc", icon: Layers, label: "SMC/ICT" },
                 { id: "levels", icon: Target, label: "Levels" },
                 { id: "patterns", icon: TrendingUp, label: "Patterns" }
               ].map(t => (
                 <button 
                   key={t.id}
-                  onClick={() => setTab(t.id)} 
+                  onClick={() => {
+                    const el = document.getElementById(t.id);
+                    if (el) {
+                      const offset = 140; // Adjust for sticky header
+                      const bodyRect = document.body.getBoundingClientRect().top;
+                      const elementRect = el.getBoundingClientRect().top;
+                      const elementPosition = elementRect - bodyRect;
+                      const offsetPosition = elementPosition - offset;
+
+                      window.scrollTo({
+                        top: offsetPosition,
+                        behavior: 'smooth'
+                      });
+                    }
+                  }} 
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg transition-all ${
                     tab === t.id ? "bg-white text-black shadow-sm" : "text-white/30 hover:text-white/50"
                   }`}
@@ -469,203 +511,175 @@ export default function App() {
               </div>
             </div>
 
-            {/* ANALYSIS TABS */}
-            <div className="flex gap-1 overflow-x-auto no-scrollbar py-1">
-              {[
-                { id: "overview", l: "Overview", icon: Activity },
-                { id: "classic", l: "Classic", icon: BarChart3 },
-                { id: "smc", l: "SMC/ICT", icon: Layers },
-                { id: "levels", l: "Levels", icon: Target },
-                { id: "patterns", l: "Patterns", icon: TrendingUp }
-              ].map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-[11px] font-bold transition-all whitespace-nowrap border ${
-                    tab === t.id
-                      ? "bg-white text-black border-white shadow-lg shadow-white/5"
-                      : "bg-white/5 border-white/5 text-white/30 hover:text-white/50"
-                  }`}
-                >
-                  <t.icon size={14} />
-                  {t.l}
-                </button>
-              ))}
-            </div>
+            {/* ANALYSIS SECTIONS - SCROLLABLE */}
+            <div className="space-y-8 pb-24">
+              {/* OVERVIEW SECTION */}
+              <section id="overview" className="space-y-4 scroll-mt-32">
+                <div className="card">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-6">Momentum Gauges</div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <Gauge value={A.classic.rsi} label="RSI (14)" zones={[{ from: 0, to: 30, color: "#10B981" }, { from: 30, to: 70, color: "#F59E0B" }, { from: 70, to: 100, color: "#EF4444" }]} />
+                    <Gauge value={A.classic.stoch.k} label="Stoch %K" zones={[{ from: 0, to: 20, color: "#10B981" }, { from: 20, to: 80, color: "#F59E0B" }, { from: 80, to: 100, color: "#EF4444" }]} />
+                    <div className="text-center">
+                      <div className={`w-[60px] h-[60px] mx-auto mb-2 flex items-center justify-center rounded-2xl border ${A.classic.macd.histogram > 0 ? "bg-bull/5 border-bull/20 text-bull" : "bg-bear/5 border-bear/20 text-bear"}`}>
+                        {A.classic.macd.histogram > 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
+                      </div>
+                      <div className="text-[10px] text-white/30 uppercase font-bold tracking-widest">MACD</div>
+                    </div>
+                  </div>
+                </div>
 
-            {/* TAB CONTENT */}
-            <div className="min-h-[300px]">
-              {tab === "overview" && (
-                <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
-                  <div className="card">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-6">Momentum Gauges</div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <Gauge value={A.classic.rsi} label="RSI (14)" zones={[{ from: 0, to: 30, color: "#10B981" }, { from: 30, to: 70, color: "#F59E0B" }, { from: 70, to: 100, color: "#EF4444" }]} />
-                      <Gauge value={A.classic.stoch.k} label="Stoch %K" zones={[{ from: 0, to: 20, color: "#10B981" }, { from: 20, to: 80, color: "#F59E0B" }, { from: 80, to: 100, color: "#EF4444" }]} />
-                      <div className="text-center">
-                        <div className={`w-[60px] h-[60px] mx-auto mb-2 flex items-center justify-center rounded-2xl border ${A.classic.macd.histogram > 0 ? "bg-bull/5 border-bull/20 text-bull" : "bg-bear/5 border-bear/20 text-bear"}`}>
-                          {A.classic.macd.histogram > 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
+                <div className="card">
+                  <div className="flex justify-between items-center mb-6">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/30">Trend Strength (ADX)</div>
+                    <Badge type={A.classic.adx.trend === "strong" ? "bullish" : "neutral"}>{A.classic.adx.trend}</Badge>
+                  </div>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(100, A.classic.adx.adx || 0)}%` }}
+                        className={`h-full ${A.classic.adx.adx > 25 ? "bg-bull" : "bg-amber-500"}`}
+                      />
+                    </div>
+                    <span className="text-base font-bold font-mono">{fmt(A.classic.adx.adx, 2)}</span>
+                  </div>
+                  <div className="flex gap-6 text-[11px] font-bold font-mono">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-bull" />
+                      <span className="text-bull">DI+ {fmt(A.classic.adx.diP, 2)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-bear" />
+                      <span className="text-bear">DI- {fmt(A.classic.adx.diN, 2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* CLASSIC INDICATORS */}
+              <section id="classic" className="space-y-4 scroll-mt-32">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 px-1">Classic Indicators</div>
+                <div className="card">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-sm font-bold">RSI Analysis</span>
+                    <span className={`text-xl font-bold font-mono ${A.classic.rsi > 70 ? "text-bear" : A.classic.rsi < 30 ? "text-bull" : "text-amber-400"}`}>
+                      {fmt(A.classic.rsi, 2)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/40 leading-relaxed">
+                    {A.classic.rsi > 70 ? "Market is overextended. High probability of a pullback or consolidation phase." : A.classic.rsi < 30 ? "Market is oversold. Potential for a relief rally or trend reversal." : "RSI is in neutral territory. Trend continuation remains the primary scenario."}
+                  </p>
+                </div>
+                <div className="card">
+                  <div className="flex justify-between items-center mb-6">
+                    <span className="text-sm font-bold">MACD Components</span>
+                    <Badge type={A.classic.macd.histogram > 0 ? "bullish" : "bearish"}>{A.classic.macd.histogram > 0 ? "Bullish" : "Bearish"}</Badge>
+                  </div>
+                  <div className="grid grid-cols-3 gap-6">
+                    {[
+                      { l: "MACD", v: A.classic.macd.value },
+                      { l: "Signal", v: A.classic.macd.signal },
+                      { l: "Hist", v: A.classic.macd.histogram }
+                    ].map(i => (
+                      <div key={i.l}>
+                        <div className="text-[9px] text-white/20 font-bold uppercase tracking-widest mb-1.5">{i.l}</div>
+                        <div className={`text-sm font-bold font-mono ${i.v >= 0 ? "text-bull" : "text-bear"}`}>{fmt(i.v, 4)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              {/* SMC SECTION */}
+              <section id="smc" className="space-y-4 scroll-mt-32">
+                <div className="card">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-2">
+                      <Layers size={16} className="text-purple-400" />
+                      <span className="text-sm font-bold">Smart Money OBs</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">{A.smc.orderBlocks.length} Zones</span>
+                  </div>
+                  <div className="space-y-3">
+                    {A.smc.orderBlocks.length === 0 ? (
+                      <div className="text-xs text-white/20 py-6 text-center border border-dashed border-white/5 rounded-2xl">No unmitigated OBs found.</div>
+                    ) : (
+                      A.smc.orderBlocks.map((ob, i) => (
+                        <div key={i} className={`flex justify-between items-center p-4 rounded-2xl border ${ob.type === "bullish" ? "bg-bull/5 border-bull/10" : "bg-bear/5 border-bear/10"}`}>
+                          <div className="flex items-center gap-3">
+                            <div className={`w-1 h-8 rounded-full ${ob.type === "bullish" ? "bg-bull" : "bg-bear"}`} />
+                            <div>
+                              <div className="text-xs font-bold uppercase tracking-wider">{ob.type} OB</div>
+                              <div className="text-[10px] text-white/30 mt-0.5">Strength: {ob.strength.toFixed(2)}x</div>
+                            </div>
+                          </div>
+                          <div className="text-right font-mono">
+                            <div className="text-sm font-bold">{fmt(ob.high)}</div>
+                            <div className="text-[11px] text-white/30">{fmt(ob.low)}</div>
+                          </div>
                         </div>
-                        <div className="text-[10px] text-white/30 uppercase font-bold tracking-widest">MACD</div>
-                      </div>
-                    </div>
+                      ))
+                    )}
                   </div>
+                </div>
+              </section>
 
-                  <div className="card">
-                    <div className="flex justify-between items-center mb-6">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/30">Trend Strength (ADX)</div>
-                      <Badge type={A.classic.adx.trend === "strong" ? "bullish" : "neutral"}>{A.classic.adx.trend}</Badge>
-                    </div>
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${Math.min(100, A.classic.adx.adx || 0)}%` }}
-                          className={`h-full ${A.classic.adx.adx > 25 ? "bg-bull" : "bg-amber-500"}`}
-                        />
-                      </div>
-                      <span className="text-base font-bold font-mono">{fmt(A.classic.adx.adx, 2)}</span>
-                    </div>
-                    <div className="flex gap-6 text-[11px] font-bold font-mono">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-bull" />
-                        <span className="text-bull">DI+ {fmt(A.classic.adx.diP, 2)}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-bear" />
-                        <span className="text-bear">DI- {fmt(A.classic.adx.diN, 2)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {tab === "classic" && (
-                <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
-                  <div className="card">
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="text-sm font-bold">RSI Analysis</span>
-                      <span className={`text-xl font-bold font-mono ${A.classic.rsi > 70 ? "text-bear" : A.classic.rsi < 30 ? "text-bull" : "text-amber-400"}`}>
-                        {fmt(A.classic.rsi, 2)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-white/40 leading-relaxed">
-                      {A.classic.rsi > 70 ? "Market is overextended. High probability of a pullback or consolidation phase." : A.classic.rsi < 30 ? "Market is oversold. Potential for a relief rally or trend reversal." : "RSI is in neutral territory. Trend continuation remains the primary scenario."}
-                    </p>
-                  </div>
-                  <div className="card">
-                    <div className="flex justify-between items-center mb-6">
-                      <span className="text-sm font-bold">MACD Components</span>
-                      <Badge type={A.classic.macd.histogram > 0 ? "bullish" : "bearish"}>{A.classic.macd.histogram > 0 ? "Bullish" : "Bearish"}</Badge>
-                    </div>
-                    <div className="grid grid-cols-3 gap-6">
-                      {[
-                        { l: "MACD", v: A.classic.macd.value },
-                        { l: "Signal", v: A.classic.macd.signal },
-                        { l: "Hist", v: A.classic.macd.histogram }
-                      ].map(i => (
-                        <div key={i.l}>
-                          <div className="text-[9px] text-white/20 font-bold uppercase tracking-widest mb-1.5">{i.l}</div>
-                          <div className={`text-sm font-bold font-mono ${i.v >= 0 ? "text-bull" : "text-bear"}`}>{fmt(i.v, 4)}</div>
+              {/* LEVELS SECTION */}
+              <section id="levels" className="space-y-4 scroll-mt-32">
+                <div className="card">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-6">Key Price Levels</div>
+                  <div className="space-y-3">
+                    {A.sr.map((lv, i) => {
+                      const dist = ((lv.price - A.price.current) / A.price.current * 100).toFixed(2);
+                      return (
+                        <div key={i} className={`flex justify-between items-center p-4 rounded-2xl border ${lv.type === "resistance" ? "bg-bear/5 border-bear/10" : "bg-bull/5 border-bull/10"}`}>
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${lv.type === "resistance" ? "bg-bear/10 text-bear" : "bg-bull/10 text-bull"}`}>
+                              {lv.type === "resistance" ? <TrendingDown size={16} /> : <TrendingUp size={16} />}
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold uppercase tracking-wider">{lv.type}</div>
+                              <div className="text-[10px] text-white/30 mt-0.5">{lv.touches} Rejections</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-bold font-mono">{fmt(lv.price)}</div>
+                            <div className={`text-[11px] font-bold font-mono ${Number(dist) > 0 ? "text-bear" : "text-bull"}`}>{Number(dist) > 0 ? "+" : ""}{dist}%</div>
+                          </div>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
-                </motion.div>
-              )}
+                </div>
+              </section>
 
-              {tab === "smc" && (
-                <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
-                  <div className="card">
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-2">
-                        <Layers size={16} className="text-purple-400" />
-                        <span className="text-sm font-bold">Smart Money OBs</span>
-                      </div>
-                      <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">{A.smc.orderBlocks.length} Zones</span>
-                    </div>
-                    <div className="space-y-3">
-                      {A.smc.orderBlocks.length === 0 ? (
-                        <div className="text-xs text-white/20 py-6 text-center border border-dashed border-white/5 rounded-2xl">No unmitigated OBs found.</div>
-                      ) : (
-                        A.smc.orderBlocks.map((ob, i) => (
-                          <div key={i} className={`flex justify-between items-center p-4 rounded-2xl border ${ob.type === "bullish" ? "bg-bull/5 border-bull/10" : "bg-bear/5 border-bear/10"}`}>
-                            <div className="flex items-center gap-3">
-                              <div className={`w-1 h-8 rounded-full ${ob.type === "bullish" ? "bg-bull" : "bg-bear"}`} />
-                              <div>
-                                <div className="text-xs font-bold uppercase tracking-wider">{ob.type} OB</div>
-                                <div className="text-[10px] text-white/30 mt-0.5">Strength: {ob.strength.toFixed(2)}x</div>
-                              </div>
+              {/* PATTERNS SECTION */}
+              <section id="patterns" className="space-y-4 scroll-mt-32">
+                <div className="card">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-6">Detected Patterns</div>
+                  <div className="space-y-3">
+                    {A.patterns.length === 0 ? (
+                      <div className="text-xs text-white/20 py-10 text-center border border-dashed border-white/5 rounded-2xl">No patterns found in current timeframe.</div>
+                    ) : (
+                      A.patterns.map((p, i) => (
+                        <div key={i} className={`flex justify-between items-center p-4 rounded-2xl border ${p.type === "bullish" ? "bg-bull/5 border-bull/10" : p.type === "bearish" ? "bg-bear/5 border-bear/10" : "bg-white/5 border-white/10"}`}>
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${p.type === "bullish" ? "bg-bull/10 text-bull" : p.type === "bearish" ? "bg-bear/10 text-bear" : "bg-white/10 text-white/40"}`}>
+                              <TrendingUp size={20} />
                             </div>
-                            <div className="text-right font-mono">
-                              <div className="text-sm font-bold">{fmt(ob.high)}</div>
-                              <div className="text-[11px] text-white/30">{fmt(ob.low)}</div>
+                            <div>
+                              <div className="text-sm font-bold">{p.name}</div>
+                              <div className="text-[10px] text-white/30 mt-0.5 uppercase font-bold tracking-widest">{p.sig} CONFIDENCE</div>
                             </div>
                           </div>
-                        ))
-                      )}
-                    </div>
+                          <Badge type={p.type}>{p.type}</Badge>
+                        </div>
+                      ))
+                    )}
                   </div>
-                </motion.div>
-              )}
-
-              {tab === "levels" && (
-                <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
-                  <div className="card">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-6">Key Price Levels</div>
-                    <div className="space-y-3">
-                      {A.sr.map((lv, i) => {
-                        const dist = ((lv.price - A.price.current) / A.price.current * 100).toFixed(2);
-                        return (
-                          <div key={i} className={`flex justify-between items-center p-4 rounded-2xl border ${lv.type === "resistance" ? "bg-bear/5 border-bear/10" : "bg-bull/5 border-bull/10"}`}>
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${lv.type === "resistance" ? "bg-bear/10 text-bear" : "bg-bull/10 text-bull"}`}>
-                                {lv.type === "resistance" ? <TrendingDown size={16} /> : <TrendingUp size={16} />}
-                              </div>
-                              <div>
-                                <div className="text-xs font-bold uppercase tracking-wider">{lv.type}</div>
-                                <div className="text-[10px] text-white/30 mt-0.5">{lv.touches} Rejections</div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-sm font-bold font-mono">{fmt(lv.price)}</div>
-                              <div className={`text-[11px] font-bold font-mono ${Number(dist) > 0 ? "text-bear" : "text-bull"}`}>{Number(dist) > 0 ? "+" : ""}{dist}%</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {tab === "patterns" && (
-                <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
-                  <div className="card">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-6">Detected Patterns</div>
-                    <div className="space-y-3">
-                      {A.patterns.length === 0 ? (
-                        <div className="text-xs text-white/20 py-10 text-center border border-dashed border-white/5 rounded-2xl">Scanning for patterns...</div>
-                      ) : (
-                        A.patterns.map((p, i) => (
-                          <div key={i} className={`flex justify-between items-center p-4 rounded-2xl border ${p.type === "bullish" ? "bg-bull/5 border-bull/10" : p.type === "bearish" ? "bg-bear/5 border-bear/10" : "bg-white/5 border-white/10"}`}>
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${p.type === "bullish" ? "bg-bull/10 text-bull" : p.type === "bearish" ? "bg-bear/10 text-bear" : "bg-white/10 text-white/40"}`}>
-                                <TrendingUp size={20} />
-                              </div>
-                              <div>
-                                <div className="text-sm font-bold">{p.name}</div>
-                                <div className="text-[10px] text-white/30 mt-0.5 uppercase font-bold tracking-widest">{p.sig} CONFIDENCE</div>
-                              </div>
-                            </div>
-                            <Badge type={p.type}>{p.type}</Badge>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
+                </div>
+              </section>
             </div>
 
             <footer className="text-center py-12 opacity-20">
