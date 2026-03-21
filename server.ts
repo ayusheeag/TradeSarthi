@@ -15,6 +15,48 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Proxy for Dhan Instruments (CSV)
+  app.get("/api/dhan-instruments", async (req, res) => {
+    try {
+      const response = await fetch("https://images.dhan.co/api-data/api-scrip-master.csv");
+      const text = await response.text();
+      res.send(text);
+    } catch (error) {
+      res.status(500).send("Failed to fetch Dhan instruments");
+    }
+  });
+
+  // Proxy for Dhan API
+  app.all("/api/dhan/*", async (req, res) => {
+    const path = req.params[0];
+    const queryParams = new URLSearchParams(req.query as any);
+    
+    const clientId = process.env.DHAN_CLIENT_ID;
+    const accessToken = process.env.DHAN_ACCESS_TOKEN;
+
+    if (!accessToken) {
+      return res.status(401).json({ error: "Dhan Access Token not configured" });
+    }
+
+    const url = `https://api.dhan.co/${path}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+
+    try {
+      const response = await fetch(url, {
+        method: req.method,
+        headers: {
+          "access-token": accessToken,
+          "client-id": clientId || "",
+          "Content-Type": "application/json"
+        },
+        body: req.method !== "GET" ? JSON.stringify(req.body) : undefined
+      });
+      const data = await response.json();
+      res.status(response.status).json(data);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch from Dhan API" });
+    }
+  });
+
   // Proxy for Yahoo Finance
   app.get("/api/yahoo/:endpoint/:symbol", async (req, res) => {
     const { endpoint, symbol } = req.params;

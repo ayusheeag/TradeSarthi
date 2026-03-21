@@ -4,7 +4,8 @@ import { Ticker, AnalysisResult, OHLCData } from "./types";
 import { dataAdapter, demoOHLC } from "./services/dataService";
 import { TA } from "./services/taService";
 import { CandleChart } from "./components/CandleChart";
-import { Gauge, Badge, Dot, Logo } from "./components/UI";
+import { Gauge, Badge, Logo, SaarthiAnimator } from "./components/UI";
+import { MarketDashboard } from "./components/MarketDashboard";
 import { motion, AnimatePresence } from "motion/react";
 import { Settings, Search, X, TrendingUp, TrendingDown, Activity, Layers, Target, BarChart3, ChevronRight, Info, RefreshCw } from "lucide-react";
 
@@ -50,9 +51,9 @@ export default function App() {
     const t = useTf || tf;
     try {
       const a = (dataAdapter as any)[C.source];
-      let ohlc = await a?.ohlc(tk.symbol, tk.exchange || ex, t, tk);
+      let ohlc = await a?.ohlc(tk.id, tk.exchange || ex, t, tk);
       if (ohlc && ohlc.length >= 30) {
-        setDs({ live: true, src: a.name, n: ohlc.length });
+        setDs({ live: true, src: C.source, n: ohlc.length });
       } else {
         setDs({ live: false, src: "Demo", n: 200, why: "Using demo data" });
         ohlc = demoOHLC(tk.symbol);
@@ -79,40 +80,35 @@ export default function App() {
     if (ticker) analyze(ticker, tf);
   }, [tf, analyze, ticker]);
 
-  const fmt = (n: number | null, d = 2) => {
+  const fmt = useCallback((n: number | null, d = 2) => {
     if (n == null || isNaN(n)) return "—";
-    const v = Number(n);
-    if (Math.abs(v) >= 10000) return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
-    if (Math.abs(v) >= 1) return v.toFixed(d);
-    if (Math.abs(v) < 0.01) return v.toFixed(6);
-    return v.toFixed(d);
-  };
+    return Number(n).toLocaleString("en-IN", { minimumFractionDigits: d, maximumFractionDigits: d });
+  }, []);
 
-  const fV = (v: number) => {
+  const fV = useCallback((v: number) => {
     if (!v) return "—";
-    if (v >= 1e9) return (v / 1e9).toFixed(1) + "B";
-    if (v >= 1e6) return (v / 1e6).toFixed(1) + "M";
-    if (v >= 1e3) return (v / 1e3).toFixed(0) + "K";
+    if (v >= 1e7) return (v / 1e7).toFixed(2) + "Cr";
+    if (v >= 1e5) return (v / 1e5).toFixed(2) + "L";
+    if (v >= 1e3) return (v / 1e3).toFixed(2) + "K";
     return v.toFixed(0);
-  };
+  }, []);
 
-  const A = analysis;
+  const A = useMemo(() => analysis, [analysis]);
 
   return (
     <div className="min-h-screen bg-bg text-[#E8E9ED] font-sans max-w-[480px] mx-auto relative pb-28">
       {/* TOP BAR */}
-      <header className="px-6 py-6 sticky top-0 bg-bg/80 backdrop-blur-xl z-50">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Logo size={44} />
+      <header className="px-4 sm:px-6 py-4 sm:py-6 sticky top-0 bg-bg/80 backdrop-blur-xl z-50">
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Logo size={36} />
             <div>
-              <h1 className="text-xl font-bold tracking-tight">Trade Saarthi</h1>
-              <div className="flex items-center gap-1.5">
-                <Dot on={ds?.live ?? false} />
-                <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest">
-                  {ds?.live ? (C.isLive ? "Live Feed" : "Delayed/EOD") : "Demo Mode"}
-                </span>
-              </div>
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight">
+                Trade <SaarthiAnimator />
+              </h1>
+              <p className="text-[9px] sm:text-[10px] text-white/30 font-medium uppercase tracking-wider">
+                Made in India for traders across globe
+              </p>
             </div>
           </div>
           <button 
@@ -130,20 +126,26 @@ export default function App() {
             <button
               key={c.id}
               onClick={() => setCat(c.id as any)}
-              className={`flex-none flex items-center gap-2 px-4 py-2.5 rounded-full text-[11px] font-bold transition-all border ${
+              className={`flex-none flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full text-[10px] sm:text-[11px] font-bold transition-all border ${
                 cat === c.id
                   ? "bg-white text-black border-white"
                   : "bg-white/5 border-white/5 text-white/40 hover:bg-white/10"
               }`}
             >
-              <span>{c.icon}</span>
+              <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center overflow-hidden rounded-sm">
+                {c.icon.startsWith("http") ? (
+                  <img src={c.icon} alt={c.label} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  c.icon
+                )}
+              </span>
               {c.label}
             </button>
           ))}
         </div>
       </header>
 
-      <main className="px-6">
+      <main className="px-4 sm:px-6">
         <AnimatePresence>
           {showSearch && (
             <motion.div 
@@ -179,9 +181,18 @@ export default function App() {
                     onClick={() => pick(r)}
                     className="w-full flex items-center justify-between p-5 glass rounded-2xl text-left active:scale-[0.98] transition-transform"
                   >
-                    <div>
-                      <div className="text-sm font-bold font-mono">{r.symbol}</div>
-                      <div className="text-[11px] text-white/30 mt-1">{r.name}</div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg glass flex items-center justify-center overflow-hidden">
+                        {C.icon.startsWith("http") ? (
+                          <img src={C.icon} alt={C.label} className="w-5 h-5 object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                          <span className="text-base">{C.icon}</span>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold font-mono">{r.symbol}</div>
+                        <div className="text-[11px] text-white/30 mt-1">{r.name}</div>
+                      </div>
                     </div>
                     <Badge type="info" xs>{r.exchange}</Badge>
                   </button>
@@ -204,26 +215,30 @@ export default function App() {
         ) : A && ticker ? (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 py-4">
             {/* PRICE CARD - MODERN GRADIENT */}
-            <div className="relative p-6 rounded-[32px] bg-gradient-to-br from-white/10 to-transparent border border-white/10 overflow-hidden shadow-2xl">
+            <div className="relative p-5 sm:p-6 rounded-[28px] sm:rounded-[32px] bg-gradient-to-br from-white/10 to-transparent border border-white/10 overflow-hidden shadow-2xl">
               <div className="absolute top-0 right-0 w-40 h-40 bg-accent/10 rounded-full blur-[80px] -mr-20 -mt-20" />
               
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl glass flex items-center justify-center font-bold text-xs">
-                    {ticker.symbol.slice(0, 1)}
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl glass flex items-center justify-center overflow-hidden">
+                    {C.icon.startsWith("http") ? (
+                      <img src={C.icon} alt={C.label} className="w-5 h-5 sm:w-6 sm:h-6 object-contain" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="text-lg sm:text-xl">{C.icon}</span>
+                    )}
                   </div>
                   <div>
-                    <div className="text-sm font-bold font-mono">{ticker.symbol}</div>
-                    <div className="text-[10px] text-white/30 font-medium uppercase tracking-wider">{ticker.exchange || ex}</div>
+                    <div className="text-xs sm:text-sm font-bold font-mono">{ticker.symbol}</div>
+                    <div className="text-[9px] sm:text-[10px] text-white/30 font-medium uppercase tracking-wider">{ticker.exchange || ex}</div>
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-col items-end gap-1.5 sm:gap-2">
                   <div className="flex gap-1">
-                    {["5m", "15m", "1H", "4H", "1D", "1W"].map(t => (
+                    {["5m", "15m", "1H", "1D"].map(t => (
                       <button 
                         key={t} 
                         onClick={() => setTf(t)}
-                        className={`text-[9px] font-bold px-2 py-1 rounded-lg transition-colors ${tf === t ? "bg-white text-black" : "text-white/20 hover:text-white/40"}`}
+                        className={`text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg transition-colors ${tf === t ? "bg-white text-black" : "text-white/20 hover:text-white/40"}`}
                       >
                         {t}
                       </button>
@@ -231,23 +246,30 @@ export default function App() {
                   </div>
                   <button 
                     onClick={() => ticker && analyze(ticker)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass text-[10px] font-bold text-accent hover:bg-white/10 transition-all active:scale-95"
+                    className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl glass text-[9px] sm:text-[10px] font-bold text-accent hover:bg-white/10 transition-all active:scale-95"
                   >
-                    <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+                    <RefreshCw size={10} className={loading ? "animate-spin" : ""} />
                     RECHECK
                   </button>
                 </div>
               </div>
 
-              <div className="flex items-baseline gap-3 mb-8">
-                <span className="text-4xl font-bold font-mono tracking-tighter">{fmt(A.price.current)}</span>
-                <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold font-mono ${Number(A.price.change) >= 0 ? "bg-bull/10 text-bull" : "bg-bear/10 text-bear"}`}>
-                  {Number(A.price.change) >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                  {A.price.changePct}%
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <div className="flex items-baseline gap-2 sm:gap-3">
+                  <span className="text-3xl sm:text-4xl font-bold font-mono tracking-tighter">{fmt(A.price.current)}</span>
+                  <div className={`flex items-center gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg text-[10px] sm:text-[11px] font-bold font-mono ${Number(A.price.change) >= 0 ? "bg-bull/10 text-bull" : "bg-bear/10 text-bear"}`}>
+                    {Number(A.price.change) >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                    {Number(A.price.changePct).toFixed(2)}%
+                  </div>
                 </div>
+                {A && (Date.now() - A.raw[A.raw.length - 1].time) >= 86400000 && (
+                  <Badge type="neutral" xs>
+                    Closed ({new Date(A.raw[A.raw.length - 1].time).toLocaleDateString("en-IN", { day: "numeric", month: "short" })})
+                  </Badge>
+                )}
               </div>
 
-              <div className="grid grid-cols-4 gap-4 pt-6 border-t border-white/5">
+              <div className="grid grid-cols-4 gap-2 sm:gap-4 pt-4 sm:pt-6 border-t border-white/5">
                 {[
                   { l: "Open", v: A.price.open },
                   { l: "High", v: A.price.high },
@@ -255,8 +277,8 @@ export default function App() {
                   { l: "Vol", v: A.price.volume, isV: true }
                 ].map(i => (
                   <div key={i.l}>
-                    <div className="text-[9px] text-white/20 font-bold uppercase tracking-widest mb-1.5">{i.l}</div>
-                    <div className="text-[11px] font-bold font-mono">{i.isV ? fV(i.v as number) : fmt(i.v as number)}</div>
+                    <div className="text-[8px] sm:text-[9px] text-white/20 font-bold uppercase tracking-widest mb-1 sm:mb-1.5">{i.l}</div>
+                    <div className="text-[10px] sm:text-[11px] font-bold font-mono">{i.isV ? fV(i.v as number) : fmt(i.v as number)}</div>
                   </div>
                 ))}
               </div>
@@ -363,16 +385,16 @@ export default function App() {
                           className={`h-full ${A.classic.adx.adx > 25 ? "bg-bull" : "bg-amber-500"}`}
                         />
                       </div>
-                      <span className="text-base font-bold font-mono">{fmt(A.classic.adx.adx, 1)}</span>
+                      <span className="text-base font-bold font-mono">{fmt(A.classic.adx.adx, 2)}</span>
                     </div>
                     <div className="flex gap-6 text-[11px] font-bold font-mono">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-bull" />
-                        <span className="text-bull">DI+ {fmt(A.classic.adx.diP, 1)}</span>
+                        <span className="text-bull">DI+ {fmt(A.classic.adx.diP, 2)}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-bear" />
-                        <span className="text-bear">DI- {fmt(A.classic.adx.diN, 1)}</span>
+                        <span className="text-bear">DI- {fmt(A.classic.adx.diN, 2)}</span>
                       </div>
                     </div>
                   </div>
@@ -385,7 +407,7 @@ export default function App() {
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-sm font-bold">RSI Analysis</span>
                       <span className={`text-xl font-bold font-mono ${A.classic.rsi > 70 ? "text-bear" : A.classic.rsi < 30 ? "text-bull" : "text-amber-400"}`}>
-                        {fmt(A.classic.rsi, 1)}
+                        {fmt(A.classic.rsi, 2)}
                       </span>
                     </div>
                     <p className="text-xs text-white/40 leading-relaxed">
@@ -433,7 +455,7 @@ export default function App() {
                               <div className={`w-1 h-8 rounded-full ${ob.type === "bullish" ? "bg-bull" : "bg-bear"}`} />
                               <div>
                                 <div className="text-xs font-bold uppercase tracking-wider">{ob.type} OB</div>
-                                <div className="text-[10px] text-white/30 mt-0.5">Strength: {ob.strength.toFixed(1)}x</div>
+                                <div className="text-[10px] text-white/30 mt-0.5">Strength: {ob.strength.toFixed(2)}x</div>
                               </div>
                             </div>
                             <div className="text-right font-mono">
@@ -454,7 +476,7 @@ export default function App() {
                     <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-6">Key Price Levels</div>
                     <div className="space-y-3">
                       {A.sr.map((lv, i) => {
-                        const dist = ((lv.price - A.price.current) / A.price.current * 100).toFixed(1);
+                        const dist = ((lv.price - A.price.current) / A.price.current * 100).toFixed(2);
                         return (
                           <div key={i} className={`flex justify-between items-center p-4 rounded-2xl border ${lv.type === "resistance" ? "bg-bear/5 border-bear/10" : "bg-bull/5 border-bull/10"}`}>
                             <div className="flex items-center gap-3">
@@ -512,21 +534,11 @@ export default function App() {
             </footer>
           </motion.div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-32 text-center px-10">
-            <div className="w-24 h-24 bg-white/5 rounded-[40px] flex items-center justify-center mb-8 border border-white/10 shadow-2xl">
-              <Activity size={40} className="text-white/10" />
-            </div>
-            <h2 className="text-2xl font-bold mb-3 tracking-tight">Market Intelligence</h2>
-            <p className="text-sm text-white/30 leading-relaxed">
-              Search for any asset to unlock institutional-grade technical analysis and smart money insights.
-            </p>
-            <button 
-              onClick={() => setShowSearch(true)}
-              className="mt-10 btn-primary w-full shadow-xl shadow-white/5"
-            >
-              Start Analysis
-            </button>
-          </div>
+          <MarketDashboard 
+            cat={cat} 
+            source={C.source} 
+            onPick={pick} 
+          />
         )}
       </main>
 

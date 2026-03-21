@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { OHLCData, AnalysisResult } from "../types";
 
 interface CandleChartProps {
@@ -24,6 +24,15 @@ export function CandleChart({ data, analysis, color, height = 195 }: CandleChart
     return () => ro.disconnect();
   }, []);
 
+  const vis = useMemo(() => data.slice(-80), [data]);
+  const pad = useMemo(() => ({ t: 12, b: 24, l: 4, r: 52 }), []);
+  const cW = useMemo(() => Math.max(2, (dims.w - pad.l - pad.r) / vis.length - 1), [dims.w, vis.length, pad]);
+  const maxP = useMemo(() => Math.max(...vis.map(d => d.high)), [vis]);
+  const minP = useMemo(() => Math.min(...vis.map(d => d.low)), [vis]);
+  const range = useMemo(() => (maxP - minP) * 1.1 || 1, [maxP, minP]);
+  const yS = useCallback((p: number) => pad.t + ((maxP + (range * 0.05) - p) / range) * (height - pad.t - pad.b), [maxP, range, height, pad]);
+  const xP = useCallback((i: number) => pad.l + i * (cW + 1) + cW / 2, [pad.l, cW]);
+
   useEffect(() => {
     const cv = cvRef.current;
     if (!cv || !data || data.length < 2) return;
@@ -38,16 +47,6 @@ export function CandleChart({ data, analysis, color, height = 195 }: CandleChart
     cv.style.height = H + "px";
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, W, H);
-
-    const vis = data.slice(-80);
-    const pad = { t: 12, b: 24, l: 4, r: 52 };
-    const cW = Math.max(2, (W - pad.l - pad.r) / vis.length - 1);
-    const maxP = Math.max(...vis.map(d => d.high));
-    const minP = Math.min(...vis.map(d => d.low));
-    const range = (maxP - minP) * 1.1 || 1;
-    const mid = (maxP + minP) / 2;
-    const yS = (p: number) => pad.t + ((maxP + (range * 0.05) - p) / range) * (H - pad.t - pad.b);
-    const xP = (i: number) => pad.l + i * (cW + 1) + cW / 2;
 
     // Grid
     ctx.strokeStyle = "rgba(255,255,255,0.02)";
@@ -65,7 +64,7 @@ export function CandleChart({ data, analysis, color, height = 195 }: CandleChart
     ctx.textAlign = "right";
     for (let i = 0; i < 5; i++) {
       const p = (maxP + (range * 0.05)) - (range / 4) * i;
-      ctx.fillText(p >= 1000 ? p.toLocaleString(undefined, { maximumFractionDigits: 0 }) : p.toFixed(2), W - 4, yS(p) + 3);
+      ctx.fillText(p.toFixed(2), W - 4, yS(p) + 3);
     }
 
     // Volume (Subtle)
@@ -147,7 +146,7 @@ export function CandleChart({ data, analysis, color, height = 195 }: CandleChart
     ctx.fillStyle = "#000";
     ctx.font = "bold 9px 'JetBrains Mono'";
     ctx.textAlign = "center";
-    ctx.fillText(last.close >= 1000 ? last.close.toFixed(0) : last.close.toFixed(2), W - pad.r/2, curY + 3);
+    ctx.fillText(last.close.toFixed(2), W - pad.r/2, curY + 3);
 
     // Crosshair
     if (tip) {
@@ -166,16 +165,18 @@ export function CandleChart({ data, analysis, color, height = 195 }: CandleChart
     }
   }, [data, dims, analysis, color, height, tip]);
 
-  const onMove = useCallback((e: any) => {
-    if (!data || !boxRef.current) return;
-    const rect = boxRef.current.getBoundingClientRect();
-    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-    const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-    const vis = data.slice(-80);
-    const cW = Math.max(2, (dims.w - 56) / vis.length - 1);
-    const idx = Math.floor((x - 4) / (cW + 1));
-    if (idx >= 0 && idx < vis.length) setTip({ x, y, d: vis[idx] });
-  }, [data, dims]);
+    const onMove = useCallback((e: any) => {
+      if (!data || !boxRef.current) return;
+      const rect = boxRef.current.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      const vis = data.slice(-80);
+      const cW = Math.max(2, (dims.w - 56) / vis.length - 1);
+      const idx = Math.floor((x - 4) / (cW + 1));
+      if (idx >= 0 && idx < vis.length) setTip({ x, y, d: vis[idx] });
+    }, [data, dims.w]);
 
   return (
     <div
@@ -200,7 +201,7 @@ export function CandleChart({ data, analysis, color, height = 195 }: CandleChart
           <div className="flex justify-between"><span>CLOSE</span> <b className="text-white">{tip.d.close?.toFixed(2)}</b></div>
           <div className="flex justify-between pt-1 border-t border-white/5 mt-1">
             <span className="text-white/30">VOL</span> 
-            <b className="text-white/60">{(tip.d.volume || 0) > 1e6 ? ((tip.d.volume / 1e6).toFixed(1) + "M") : ((tip.d.volume / 1e3).toFixed(0) + "K")}</b>
+            <b className="text-white/60">{(tip.d.volume || 0) > 1e6 ? ((tip.d.volume / 1e6).toFixed(2) + "M") : ((tip.d.volume / 1e3).toFixed(2) + "K")}</b>
           </div>
         </div>
       )}

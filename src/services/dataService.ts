@@ -41,30 +41,172 @@ export function demoOHLC(sym: string, n = 200): OHLCData[] {
   return d;
 }
 
+let _dhanCache: any[] | null = null, _dhanCacheT = 0;
+
+async function dhanInstruments() {
+  if (_dhanCache && Date.now() - _dhanCacheT < 86400000) return _dhanCache;
+  
+  // If we have stale cache, return it immediately and revalidate in background
+  if (_dhanCache) {
+    revalidateDhanInstruments();
+    return _dhanCache;
+  }
+
+  return await revalidateDhanInstruments();
+}
+
+async function revalidateDhanInstruments() {
+  try {
+    const r = await fetch("/api/dhan-instruments");
+    if (!r.ok) throw 0;
+    const text = await r.text();
+    const rows = text.split("\n");
+    
+    // Faster parsing using a single loop and avoiding unnecessary object creation
+    const results = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row) continue;
+      const cols = row.split(",");
+      if (cols.length < 3) continue;
+      
+      const symbol = cols[2];
+      if (!symbol) continue;
+
+      results.push({
+        exchange_segment: cols[0],
+        security_id: cols[1],
+        trading_symbol: symbol,
+        short_name: cols[3]
+      });
+    }
+    
+    _dhanCache = results;
+    _dhanCacheT = Date.now();
+    return _dhanCache;
+  } catch { 
+    return _dhanCache || []; 
+  }
+}
+
 export const dataAdapter = {
+  DHAN: {
+    search: async (q: string, ex: string) => {
+      if (ex === "COMEX") return dataAdapter.YAHOO.search(q, ex);
+      
+      // Use Yahoo for fast, reliable search
+      const yResults = await dataAdapter.YAHOO.search(q, ex);
+      
+      // Try to enrich with Dhan IDs if list is available
+      const insts = await dhanInstruments();
+      if (insts && insts.length > 0) {
+        const segMap: any = { "NSE": "NSE_EQ", "BSE": "BSE_EQ", "MCX": "MCX_COMM" };
+        const targetSeg = segMap[ex] || "NSE_EQ";
+        
+        return yResults.map(y => {
+          // Yahoo symbols for India end in .NS or .BO
+          const sym = y.symbol.split(".")[0].toUpperCase();
+          const d = insts.find(i => i.trading_symbol === sym && i.exchange_segment === targetSeg);
+          if (d) {
+            return { 
+              ...y, 
+              id: d.security_id, 
+              security_id: d.security_id, 
+              exchange_segment: d.exchange_segment 
+            };
+          }
+          return y;
+        });
+      }
+      return yResults;
+    },
+    ohlc: async (id: string, ex: string, tf: string, tk?: any) => {
+      if (ex === "COMEX") return dataAdapter.YAHOO.ohlc(id, ex, tf);
+      const iMap: any = { "5m": "5", "15m": "15", "1H": "60", "1D": "DAY", "1W": "WEEK" };
+      const now = new Date();
+      const from = new Date();
+      if (tf === "5m") from.setDate(now.getDate() - 5);
+      else if (tf === "15m") from.setDate(now.getDate() - 10);
+      else if (tf === "1H") from.setDate(now.getDate() - 30);
+      else if (tf === "1D") from.setDate(now.getDate() - 365);
+      else if (tf === "1W") from.setDate(now.getDate() - 1000);
+
+      const fromStr = from.toISOString().split("T")[0];
+      const toStr = now.toISOString().split("T")[0];
+
+      try {
+        // If id is not numeric, it's likely a symbol from Yahoo fallback
+        if (isNaN(Number(id))) throw new Error("Symbol passed instead of ID");
+
+        const body = {
+          symbol: tk?.symbol || "",
+          exchangeSegment: tk?.exchange_segment || (ex === "MCX" ? "MCX_COMM" : "NSE_EQ"),
+          securityId: id,
+          instrumentType: "EQUITY",
+          interval: iMap[tf] || "DAY",
+          from: fromStr,
+          to: toStr
+        };
+
+        const r = await fetch("/api/dhan/charts/historical", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        if (!r.ok) throw 0;
+        const d = await r.json();
+        if (d.status !== "success") throw 0;
+        
+        return d.data.t.map((t: any, i: number) => ({
+          time: t * 1000,
+          open: d.data.o[i],
+          high: d.data.h[i],
+          low: d.data.l[i],
+          close: d.data.c[i],
+          volume: d.data.v[i]
+        }));
+      } catch { 
+        // Fallback to Yahoo using the symbol
+        return dataAdapter.YAHOO.ohlc(tk?.symbol || id, ex, tf);
+      }
+    }
+  },
   YAHOO: {
     search: async (q: string, ex?: string) => {
       try {
-        let query = q;
-        if (ex === "NSE" && !q.endsWith(".NS")) query = `${q}.NS`;
-        if (ex === "BSE" && !q.endsWith(".BO")) query = `${q}.BO`;
-
-        const r = await fetch(`/api/yahoo/search/${encodeURIComponent(query)}?quotesCount=10&newsCount=0`);
+        // First try searching with the query as is
+        const r = await fetch(`/api/yahoo/search/${encodeURIComponent(q)}?quotesCount=15&newsCount=0`);
         if (!r.ok) throw 0;
         const d = await r.json();
-        return (d.quotes || []).filter((x: any) => {
+        
+        let results = (d.quotes || []).filter((x: any) => {
           const isType = ["EQUITY", "ETF", "INDEX", "FUTURE", "CURRENCY"].includes(x.quoteType);
+          if (ex === "NSE") return isType && x.symbol.endsWith(".NS");
+          if (ex === "BSE") return isType && x.symbol.endsWith(".BO");
           if (ex === "COMEX") return isType && (x.exchange === "CMX" || x.exchange === "NYM" || x.symbol.endsWith("=F"));
           if (ex === "FOREX") return x.quoteType === "CURRENCY" && x.symbol.includes("USD");
           return isType;
-        })
-          .map((x: any) => ({
-            symbol: x.symbol,
-            name: x.shortname || x.longname || x.symbol,
-            exchange: x.exchange || (x.symbol.endsWith(".NS") ? "NSE" : x.symbol.endsWith(".BO") ? "BSE" : "NASDAQ"),
-            id: x.symbol
-          }));
-      } catch { return demoTickers(ex === "NSE" || ex === "BSE" ? "INDIAN_EQUITY" : "US_EQUITY", q); }
+        });
+
+        // If no results for NSE/BSE, try appending suffix
+        if (results.length === 0 && (ex === "NSE" || ex === "BSE")) {
+          const suffix = ex === "NSE" ? ".NS" : ".BO";
+          const r2 = await fetch(`/api/yahoo/search/${encodeURIComponent(q + suffix)}?quotesCount=10&newsCount=0`);
+          if (r2.ok) {
+            const d2 = await r2.json();
+            results = (d2.quotes || []).filter((x: any) => x.symbol.endsWith(suffix));
+          }
+        }
+
+        return results.map((x: any) => ({
+          symbol: x.symbol,
+          name: x.shortname || x.longname || x.symbol,
+          exchange: x.exchange || (x.symbol.endsWith(".NS") ? "NSE" : x.symbol.endsWith(".BO") ? "BSE" : "NASDAQ"),
+          id: x.symbol
+        }));
+      } catch { 
+        return demoTickers(ex === "NSE" || ex === "BSE" ? "INDIAN_EQUITY" : "US_EQUITY", q); 
+      }
     },
     ohlc: async (sym: string, ex: string, tf: string) => {
       const iMap: any = { "5m": "5m", "15m": "15m", "1H": "1h", "4H": "4h", "1D": "1d", "1W": "1wk" };
@@ -134,4 +276,28 @@ export const dataAdapter = {
       } catch { return null; }
     },
   },
+  getWatchlistStats: async (symbols: string[], source: string) => {
+    const results = await Promise.all(symbols.map(async (s) => {
+      try {
+        const adapter = (dataAdapter as any)[source] || dataAdapter.YAHOO;
+        let ohlc = await adapter.ohlc(s, "", "1D");
+        if (!ohlc || ohlc.length < 2) {
+          ohlc = await adapter.ohlc(s, "", "1H");
+        }
+        if (!ohlc || ohlc.length < 2) return null;
+        const last = ohlc[ohlc.length - 1];
+        const prev = ohlc[ohlc.length - 2];
+        const change = last.close - prev.close;
+        const changePct = (change / prev.close) * 100;
+        return {
+          symbol: s,
+          price: last.close,
+          change,
+          changePct,
+          ohlc: ohlc.slice(-30)
+        };
+      } catch { return null; }
+    }));
+    return results.filter(Boolean);
+  }
 };
