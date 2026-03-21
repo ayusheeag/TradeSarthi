@@ -3,7 +3,8 @@ import { WATCHLIST, CATS } from "../constants";
 import { dataAdapter } from "../services/dataService";
 import { geminiService, TradeSuggestion } from "../services/geminiService";
 import { Badge } from "./UI";
-import { TrendingUp, TrendingDown, Target, Activity, RefreshCw, ChevronRight } from "lucide-react";
+import { logoService } from "../services/logoService";
+import { TrendingUp, TrendingDown, Target, Activity, RefreshCw, ChevronRight, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface MarketDashboardProps {
@@ -93,7 +94,14 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
             <div className="flex items-center gap-2">
               <TrendingUp size={14} className="text-bull" />
               <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-white/30">Top Gainers</span>
-              {!isMarketOpen && <Badge type="neutral" xs>Closed ({lastActiveDate})</Badge>}
+              {isMarketOpen ? (
+                <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded-md bg-bull/10 border border-bull/20">
+                  <div className="w-1 h-1 rounded-full bg-bull animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                  <span className="text-[8px] font-bold text-bull uppercase tracking-widest">Live</span>
+                </div>
+              ) : (
+                <Badge type="neutral" xs>Closed ({lastActiveDate})</Badge>
+              )}
             </div>
             <button onClick={fetchData} className="text-white/20 hover:text-white/40 active:rotate-180 transition-transform">
               <RefreshCw size={12} />
@@ -113,16 +121,20 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
                 className="w-full flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-bull/5 border border-bull/10 hover:bg-bull/10 transition-all active:scale-[0.98]"
               >
                 <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-bull/10 flex items-center justify-center overflow-hidden">
-                    {CATS[cat as keyof typeof CATS]?.icon.startsWith("http") ? (
-                      <img src={CATS[cat as keyof typeof CATS].icon} alt="" className="w-4 h-4 sm:w-5 sm:h-5 object-contain" referrerPolicy="no-referrer" />
-                    ) : (
-                      <span className="text-[10px] sm:text-xs">{CATS[cat as keyof typeof CATS]?.icon}</span>
-                    )}
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden p-1.5">
+                    <img 
+                      src={logoService.getLogoUrl(s.symbol, cat)} 
+                      alt="" 
+                      className="w-full h-full object-contain" 
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${s.symbol}&backgroundColor=151619`;
+                      }}
+                    />
                   </div>
                   <div className="text-left">
-                    <div className="text-xs sm:text-sm font-bold font-mono">{s.symbol.split(".")[0]}</div>
-                    <div className="text-[9px] sm:text-[10px] text-white/30 font-mono">{s.price.toFixed(1)}</div>
+                    <div className="text-xs sm:text-sm font-bold font-mono tracking-tight">{s.symbol.split(".")[0]}</div>
+                    <div className="text-[9px] sm:text-[10px] text-white/30 font-mono">{s.price.toLocaleString("en-IN", { minimumFractionDigits: 1 })}</div>
                   </div>
                 </div>
                 <div className="text-right">
@@ -155,16 +167,20 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
                 className="w-full flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-bear/5 border border-bear/10 hover:bg-bear/10 transition-all active:scale-[0.98]"
               >
                 <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-bear/10 flex items-center justify-center overflow-hidden">
-                    {CATS[cat as keyof typeof CATS]?.icon.startsWith("http") ? (
-                      <img src={CATS[cat as keyof typeof CATS].icon} alt="" className="w-4 h-4 sm:w-5 sm:h-5 object-contain" referrerPolicy="no-referrer" />
-                    ) : (
-                      <span className="text-[10px] sm:text-xs">{CATS[cat as keyof typeof CATS]?.icon}</span>
-                    )}
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden p-1.5">
+                    <img 
+                      src={logoService.getLogoUrl(s.symbol, cat)} 
+                      alt="" 
+                      className="w-full h-full object-contain" 
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${s.symbol}&backgroundColor=151619`;
+                      }}
+                    />
                   </div>
                   <div className="text-left">
-                    <div className="text-xs sm:text-sm font-bold font-mono">{s.symbol.split(".")[0]}</div>
-                    <div className="text-[9px] sm:text-[10px] text-white/30 font-mono">{s.price.toFixed(1)}</div>
+                    <div className="text-xs sm:text-sm font-bold font-mono tracking-tight">{s.symbol.split(".")[0]}</div>
+                    <div className="text-[9px] sm:text-[10px] text-white/30 font-mono">{s.price.toLocaleString("en-IN", { minimumFractionDigits: 1 })}</div>
                   </div>
                 </div>
                 <div className="text-right">
@@ -190,16 +206,23 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
             <div key={i} className="p-4 sm:p-5 rounded-[24px] sm:rounded-[32px] bg-white/5 border border-white/10 space-y-3 sm:space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/10 flex items-center justify-center overflow-hidden">
-                    {CATS[cat as keyof typeof CATS]?.icon.startsWith("http") ? (
-                      <img src={CATS[cat as keyof typeof CATS].icon} alt="" className="w-4 h-4 sm:w-5 sm:h-5 object-contain" referrerPolicy="no-referrer" />
-                    ) : (
-                      <span className="text-[10px] sm:text-xs">{CATS[cat as keyof typeof CATS]?.icon}</span>
-                    )}
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden p-1.5">
+                    <img 
+                      src={logoService.getLogoUrl(t.symbol, cat)} 
+                      alt="" 
+                      className="w-full h-full object-contain" 
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${t.symbol}&backgroundColor=151619`;
+                      }}
+                    />
                   </div>
                   <div className="flex flex-col">
-                    <div className="text-xs sm:text-sm font-bold font-mono">{t.symbol.split(".")[0]}</div>
-                    <Badge type={t.type === "BUY" ? "bullish" : "bearish"} xs>{t.type}</Badge>
+                    <div className="text-xs sm:text-sm font-bold font-mono tracking-tight">{t.symbol.split(".")[0]}</div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <Badge type={t.type === "BUY" ? "bullish" : "bearish"} xs>{t.type}</Badge>
+                      <span className="text-[8px] text-white/20 font-bold uppercase tracking-widest">15m Scalp</span>
+                    </div>
                   </div>
                 </div>
                 <button 

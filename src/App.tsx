@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { CATS, TFS } from "./constants";
 import { Ticker, AnalysisResult, OHLCData } from "./types";
 import { dataAdapter, demoOHLC } from "./services/dataService";
+import { logoService } from "./services/logoService";
 import { TA } from "./services/taService";
 import { CandleChart } from "./components/CandleChart";
 import { Gauge, Badge, Logo, SaarthiAnimator } from "./components/UI";
 import { MarketDashboard } from "./components/MarketDashboard";
 import { motion, AnimatePresence } from "motion/react";
-import { Settings, Search, X, TrendingUp, TrendingDown, Activity, Layers, Target, BarChart3, ChevronRight, Info, RefreshCw } from "lucide-react";
+import { Settings, Search, X, TrendingUp, TrendingDown, Activity, Layers, Target, BarChart3, ChevronRight, Info, RefreshCw, Menu, PieChart } from "lucide-react";
 
 export default function App() {
   const [cat, setCat] = useState<keyof typeof CATS>("INDIAN_EQUITY");
@@ -19,6 +20,7 @@ export default function App() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [tab, setTab] = useState("overview");
   const [ds, setDs] = useState<{ live: boolean; src: string; n: number; why?: string } | null>(null);
   const dbRef = useRef<any>(null);
@@ -82,6 +84,20 @@ export default function App() {
   };
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+      if (e.key === "Escape") {
+        setShowSearch(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
     if (ticker) analyze(ticker, tf);
   }, [tf, analyze, ticker]);
 
@@ -102,51 +118,161 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-bg text-[#E8E9ED] font-sans max-w-[480px] mx-auto relative pb-28">
+      {/* TOP-LEFT MENU DRAWER */}
+      <AnimatePresence>
+        {showMenu && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowMenu(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110]"
+            />
+            <motion.div 
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              className="fixed inset-y-0 left-0 w-[80%] max-w-[320px] bg-bg border-r border-white/10 z-[120] p-6 shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-10">
+                <Logo size={32} />
+                <button onClick={() => setShowMenu(false)} className="text-white/30 p-2"><X size={20} /></button>
+              </div>
+              
+                <div className="space-y-1">
+                  <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-accent/10 border border-accent/20 text-white text-left group transition-all hover:bg-accent/20">
+                    <div className="w-8 h-8 rounded-xl bg-accent/20 flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
+                      <Activity size={18} />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold">Technical Analysis</span>
+                      <span className="text-[10px] text-accent/60 font-medium">Live Market Data</span>
+                    </div>
+                  </button>
+                  
+                  <div className="w-full flex items-center justify-between p-4 rounded-2xl text-white/20 border border-transparent opacity-60 grayscale">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center">
+                        <PieChart size={18} />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold">Fundamental Analysis</span>
+                        <span className="text-[10px] text-white/20 font-medium">Coming Soon</span>
+                      </div>
+                    </div>
+                    <Badge type="neutral" xs>Soon</Badge>
+                  </div>
+
+                  <div className="w-full flex items-center justify-between p-4 rounded-2xl text-white/20 border border-transparent opacity-60 grayscale">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center">
+                        <Target size={18} />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold">Valuation Analysis</span>
+                        <span className="text-[10px] text-white/20 font-medium">Coming Soon</span>
+                      </div>
+                    </div>
+                    <Badge type="neutral" xs>Soon</Badge>
+                  </div>
+                </div>
+
+              <div className="absolute bottom-8 left-6 right-6">
+                <div className="p-4 rounded-2xl bg-accent/5 border border-accent/10">
+                  <p className="text-[10px] text-accent font-bold uppercase tracking-widest mb-1">Pro Tip</p>
+                  <p className="text-[11px] text-white/40 leading-relaxed">Use ⌘K to quickly search any asset from anywhere.</p>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* TOP BAR */}
-      <header className="px-4 sm:px-6 py-4 sm:py-6 sticky top-0 bg-bg/80 backdrop-blur-xl z-50">
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Logo size={36} />
-            <div>
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight">
+      <header className="px-4 py-3 sm:px-6 sm:py-6 sticky top-0 bg-bg/80 backdrop-blur-xl z-50 border-b border-white/5">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            {!ticker ? (
+              <button 
+                onClick={() => setShowMenu(true)}
+                className="w-9 h-9 rounded-xl glass flex items-center justify-center text-white/60 active:scale-90 transition-transform"
+              >
+                <Menu size={18} />
+              </button>
+            ) : (
+              <button 
+                onClick={() => { setTicker(null); setAnalysis(null); }}
+                className="w-9 h-9 rounded-xl glass flex items-center justify-center text-white/60 active:scale-90 transition-transform"
+              >
+                <ChevronRight size={18} className="rotate-180" />
+              </button>
+            )}
+            <div className="hidden xs:block">
+              <h1 className="text-sm sm:text-lg font-bold tracking-tight">
                 Trade <SaarthiAnimator />
               </h1>
-              <p className="text-[9px] sm:text-[10px] text-white/30 font-medium uppercase tracking-wider">
-                Made in India for traders across globe
-              </p>
             </div>
           </div>
+
           <button 
             onClick={() => setShowSearch(true)}
-            title="Search Assets"
-            className="w-10 h-10 rounded-full glass flex items-center justify-center text-white/60 active:scale-90 transition-transform"
+            className="flex-1 h-10 px-3 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between text-white/20 active:scale-[0.98] transition-all group hover:border-white/20 hover:bg-white/[0.07]"
           >
-            <Search size={18} />
+            <div className="flex items-center gap-2 overflow-hidden">
+              <Search size={14} className="flex-shrink-0 text-white/20 group-hover:text-white/40 transition-colors" />
+              <span className="text-[10px] sm:text-[11px] font-medium tracking-tight truncate">Get Technical Analysis...</span>
+            </div>
+            <div className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-[9px] font-mono text-white/20">
+              <span className="text-[10px]">⌘</span>K
+            </div>
           </button>
         </div>
 
-        {/* Categories - Pill Style */}
+        {/* Categories or Analysis Tabs - Sticky Sub-header */}
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {Object.values(CATS).map(c => (
-            <button
-              key={c.id}
-              onClick={() => setCat(c.id as any)}
-              className={`flex-none flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full text-[10px] sm:text-[11px] font-bold transition-all border ${
-                cat === c.id
-                  ? "bg-white text-black border-white"
-                  : "bg-white/5 border-white/5 text-white/40 hover:bg-white/10"
-              }`}
-            >
-              <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center overflow-hidden rounded-sm">
-                {c.icon.startsWith("http") ? (
-                  <img src={c.icon} alt={c.label} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  c.icon
-                )}
-              </span>
-              {c.label}
-            </button>
-          ))}
+          {!ticker ? (
+            Object.values(CATS).map(c => (
+              <button
+                key={c.id}
+                onClick={() => setCat(c.id as any)}
+                className={`flex-none flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full text-[10px] sm:text-[11px] font-bold transition-all border ${
+                  cat === c.id
+                    ? "bg-white text-black border-white"
+                    : "bg-white/5 border-white/5 text-white/40 hover:bg-white/10"
+                }`}
+              >
+                <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center overflow-hidden rounded-sm">
+                  {c.icon.startsWith("http") ? (
+                    <img src={c.icon} alt={c.label} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    c.icon
+                  )}
+                </span>
+                {c.label}
+              </button>
+            ))
+          ) : (
+            <div className="flex w-full bg-white/5 p-1 rounded-xl border border-white/5">
+              {[
+                { id: "overview", icon: Activity, label: "Overview" },
+                { id: "smc", icon: Layers, label: "SMC/ICT" },
+                { id: "levels", icon: Target, label: "Levels" },
+                { id: "patterns", icon: TrendingUp, label: "Patterns" }
+              ].map(t => (
+                <button 
+                  key={t.id}
+                  onClick={() => setTab(t.id)} 
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg transition-all ${
+                    tab === t.id ? "bg-white text-black shadow-sm" : "text-white/30 hover:text-white/50"
+                  }`}
+                >
+                  <t.icon size={14} />
+                  <span className="text-[9px] font-bold uppercase tracking-tighter">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </header>
 
@@ -166,7 +292,7 @@ export default function App() {
                     autoFocus
                     value={q}
                     onChange={e => setQ(e.target.value)}
-                    placeholder={`Search ${C.label}...`}
+                    placeholder="Get Technical Analysis for any asset..."
                     className="flex-1 bg-transparent border-none outline-none text-base font-medium placeholder:text-white/10"
                   />
                 </div>
@@ -187,16 +313,20 @@ export default function App() {
                     className="w-full flex items-center justify-between p-5 glass rounded-2xl text-left active:scale-[0.98] transition-transform"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg glass flex items-center justify-center overflow-hidden">
-                        {C.icon.startsWith("http") ? (
-                          <img src={C.icon} alt={C.label} className="w-5 h-5 object-contain" referrerPolicy="no-referrer" />
-                        ) : (
-                          <span className="text-base">{C.icon}</span>
-                        )}
+                      <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden p-1.5">
+                        <img 
+                          src={logoService.getLogoUrl(r.symbol, cat)} 
+                          alt="" 
+                          className="w-full h-full object-contain" 
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${r.symbol}&backgroundColor=151619`;
+                          }}
+                        />
                       </div>
                       <div>
-                        <div className="text-sm font-bold font-mono">{r.symbol}</div>
-                        <div className="text-[11px] text-white/30 mt-1">{r.name}</div>
+                        <div className="text-sm font-bold font-mono tracking-tight">{r.symbol.split(".")[0]}</div>
+                        <div className="text-[11px] text-white/30 mt-0.5 font-medium">{r.name}</div>
                       </div>
                     </div>
                     <Badge type="info" xs>{r.exchange}</Badge>
@@ -225,16 +355,20 @@ export default function App() {
               
               <div className="flex items-center justify-between mb-4 sm:mb-6">
                 <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl glass flex items-center justify-center overflow-hidden">
-                    {C.icon.startsWith("http") ? (
-                      <img src={C.icon} alt={C.label} className="w-5 h-5 sm:w-6 sm:h-6 object-contain" referrerPolicy="no-referrer" />
-                    ) : (
-                      <span className="text-lg sm:text-xl">{C.icon}</span>
-                    )}
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden p-2">
+                    <img 
+                      src={logoService.getLogoUrl(ticker.symbol, cat)} 
+                      alt="" 
+                      className="w-full h-full object-contain" 
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${ticker.symbol}&backgroundColor=151619`;
+                      }}
+                    />
                   </div>
                   <div>
-                    <div className="text-xs sm:text-sm font-bold font-mono">{ticker.symbol}</div>
-                    <div className="text-[9px] sm:text-[10px] text-white/30 font-medium uppercase tracking-wider">{ticker.exchange || ex}</div>
+                    <div className="text-sm sm:text-base font-bold font-mono tracking-tight">{ticker.symbol.split(".")[0]}</div>
+                    <div className="text-[9px] sm:text-[10px] text-white/30 font-bold uppercase tracking-widest">{ticker.exchange || ex}</div>
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1.5 sm:gap-2">
@@ -548,35 +682,34 @@ export default function App() {
       </main>
 
       {/* BOTTOM NAVIGATION - ERGONOMIC PILL */}
-      <div className="fixed bottom-8 left-6 right-6 max-w-[432px] mx-auto z-[100]">
-        <nav className="glass rounded-[32px] p-2 flex justify-between items-center shadow-2xl">
-          {[
-            { id: "overview", icon: Activity, label: "Overview" },
-            { id: "smc", icon: Layers, label: "SMC/ICT" },
-            { id: "levels", icon: Target, label: "Levels" },
-            { id: "patterns", icon: TrendingUp, label: "Patterns" }
-          ].map(t => (
-            <button 
-              key={t.id}
-              onClick={() => setTab(t.id)} 
-              title={t.label}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-[24px] transition-all ${tab === t.id ? "bg-white text-black shadow-lg" : "text-white/30 hover:text-white/50"}`}
-            >
-              <t.icon size={20} />
-              <span className="text-[8px] font-bold uppercase tracking-tighter">{t.label}</span>
-            </button>
-          ))}
-          <div className="w-px h-8 bg-white/10 mx-1" />
-          <button 
-            onClick={() => setShowSearch(true)}
-            title="Search Assets"
-            className="w-14 h-14 rounded-full bg-accent flex flex-col items-center justify-center text-white shadow-lg shadow-accent/20 active:scale-90 transition-transform"
+      <AnimatePresence>
+        {ticker && analysis && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-8 left-6 right-6 max-w-[432px] mx-auto z-[100]"
           >
-            <Search size={20} />
-            <span className="text-[8px] font-bold uppercase mt-0.5">Search</span>
-          </button>
-        </nav>
-      </div>
+            <nav className="glass rounded-[32px] p-2 flex justify-between items-center shadow-2xl">
+              <div className="flex-1 flex items-center justify-center px-4">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-white/60 truncate max-w-[120px]">{ticker.symbol}</span>
+                  <span className="text-[8px] text-white/30 uppercase tracking-tighter">{tab} View</span>
+                </div>
+              </div>
+              <div className="w-px h-8 bg-white/10 mx-1" />
+              <button 
+                onClick={() => setShowSearch(true)}
+                title="Search Assets"
+                className="w-14 h-14 rounded-full bg-accent flex flex-col items-center justify-center text-white shadow-lg shadow-accent/20 active:scale-90 transition-transform"
+              >
+                <Search size={20} />
+                <span className="text-[8px] font-bold uppercase mt-0.5">Search</span>
+              </button>
+            </nav>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
