@@ -7,8 +7,11 @@ import { TA } from "./services/taService";
 import { CandleChart } from "./components/CandleChart";
 import { Gauge, Badge, Logo, SaarthiAnimator } from "./components/UI";
 import { MarketDashboard } from "./components/MarketDashboard";
+import { FundamentalDashboard } from "./components/FundamentalDashboard";
 import { motion, AnimatePresence } from "motion/react";
-import { Settings, Search, X, TrendingUp, TrendingDown, Activity, Layers, Target, BarChart3, ChevronRight, Info, RefreshCw, Menu, PieChart } from "lucide-react";
+import { Settings, Search, X, TrendingUp, TrendingDown, Activity, Layers, Target, BarChart3, ChevronRight, Info, RefreshCw, Menu, PieChart, Download, Share2 } from "lucide-react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 
 export default function App() {
   const [cat, setCat] = useState<keyof typeof CATS>("INDIAN_EQUITY");
@@ -22,6 +25,7 @@ export default function App() {
   const [showSearch, setShowSearch] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [tab, setTab] = useState("overview");
+  const [viewMode, setViewMode] = useState<"technical" | "fundamental">("technical");
 
   // Intersection Observer for active tab highlighting
   useEffect(() => {
@@ -70,43 +74,113 @@ export default function App() {
     return () => clearTimeout(dbRef.current);
   }, [q, cat, ex, C.source]);
 
-  useEffect(() => {
-    setEx(CATS[cat].exchanges[0]);
-    setQ("");
-    setResults([]);
-    setTicker(null);
-    setAnalysis(null);
-    setDs(null);
-  }, [cat]);
+  const cacheRef = useRef<Record<string, { analysis: AnalysisResult, ds: any, timestamp: number }>>({});
 
   const analyze = useCallback(async (tk: Ticker, useTf?: string) => {
+    const t = useTf || tf;
+    const cacheKey = `${tk.id}-${tk.exchange || ex}-${t}-${C.source}`;
+    const now = Date.now();
+
+    if (cacheRef.current[cacheKey] && now - cacheRef.current[cacheKey].timestamp < 30 * 60 * 1000) {
+      setDs(cacheRef.current[cacheKey].ds);
+      setAnalysis(cacheRef.current[cacheKey].analysis);
+      return;
+    }
+
     setLoading(true);
     setDs(null);
-    const t = useTf || tf;
     try {
       const a = (dataAdapter as any)[C.source];
       let ohlc = await a?.ohlc(tk.id, tk.exchange || ex, t, tk);
+      let newDs;
       if (ohlc && ohlc.length >= 30) {
-        setDs({ live: true, src: C.source, n: ohlc.length });
+        newDs = { live: true, src: C.source, n: ohlc.length };
       } else {
-        setDs({ live: false, src: "Demo", n: 200, why: "Using demo data" });
+        newDs = { live: false, src: "Demo", n: 200, why: "Using demo data" };
         ohlc = demoOHLC(tk.symbol);
       }
       const r = TA.run(ohlc);
+      cacheRef.current[cacheKey] = { analysis: r, ds: newDs, timestamp: now };
+      setDs(newDs);
       setAnalysis(r);
-      setTab("overview");
     } catch (e: any) {
-      setDs({ live: false, src: "Demo", n: 200, why: e.message });
-      setAnalysis(TA.run(demoOHLC(tk.symbol)));
+      const newDs = { live: false, src: "Demo", n: 200, why: e.message };
+      const r = TA.run(demoOHLC(tk.symbol));
+      cacheRef.current[cacheKey] = { analysis: r, ds: newDs, timestamp: now };
+      setDs(newDs);
+      setAnalysis(r);
     }
     setLoading(false);
   }, [C.source, ex, tf]);
+
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (e.state && e.state.ticker) {
+        setCat(e.state.cat);
+        setEx(e.state.ex);
+        const tk = { ...e.state.ticker, exchange: e.state.ex };
+        setTicker(tk);
+        setQ(tk.symbol);
+        setTab("overview");
+        analyze(tk);
+      } else if (e.state && e.state.cat) {
+        setCat(e.state.cat);
+        setEx(CATS[e.state.cat as keyof typeof CATS].exchanges[0]);
+        setTicker(null);
+        setAnalysis(null);
+        setQ("");
+        setDs(null);
+      } else {
+        setTicker(null);
+        setAnalysis(null);
+        setQ("");
+        setDs(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [analyze]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const symbol = url.searchParams.get('symbol');
+    const id = url.searchParams.get('id');
+    const name = url.searchParams.get('name');
+    const urlCat = url.searchParams.get('cat');
+    const exchange = url.searchParams.get('exchange');
+    
+    if (symbol && id && name && urlCat) {
+      const t: Ticker = { symbol, id, name, exchange: exchange || undefined };
+      setCat(urlCat as keyof typeof CATS);
+      if (exchange) setEx(exchange);
+      setTicker(t);
+      setQ(symbol);
+      setTab("overview");
+      analyze(t);
+      window.history.replaceState({ ticker: t, cat: urlCat, ex: exchange }, '', url.toString());
+    } else if (urlCat) {
+      setCat(urlCat as keyof typeof CATS);
+      setEx(CATS[urlCat as keyof typeof CATS].exchanges[0]);
+      window.history.replaceState({ cat: urlCat }, '', url.toString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
 
   const pick = (t: Ticker) => {
     setTicker(t);
     setQ(t.symbol);
     setShowSearch(false);
     setResults([]);
+    setTab("overview");
+    
+    const url = new URL(window.location.href);
+    url.searchParams.set('symbol', t.symbol);
+    url.searchParams.set('id', t.id);
+    url.searchParams.set('name', t.name);
+    url.searchParams.set('cat', cat);
+    if (t.exchange) url.searchParams.set('exchange', t.exchange);
+    window.history.pushState({ ticker: t, cat, ex: t.exchange || ex }, '', url.toString());
+    
     analyze(t);
   };
 
@@ -126,7 +200,8 @@ export default function App() {
 
   useEffect(() => {
     if (ticker) analyze(ticker, tf);
-  }, [tf, analyze, ticker]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tf]);
 
   const fmt = useCallback((n: number | null, d = 2) => {
     if (n == null || isNaN(n)) return "—";
@@ -140,6 +215,62 @@ export default function App() {
     if (v >= 1e3) return (v / 1e3).toFixed(2) + "K";
     return v.toFixed(0);
   }, []);
+
+  const analysisRef = useRef<HTMLDivElement>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const exportPDF = async () => {
+    if (!analysisRef.current || !ticker) return;
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(analysisRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#050505"
+      });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      let heightLeft = pdfHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pdf.internal.pageSize.getHeight();
+
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pdf.internal.pageSize.getHeight();
+      }
+
+      pdf.save(`TradeSaarthi_${ticker.symbol}_Analysis.pdf`);
+    } catch (err) {
+      console.error("Failed to export PDF", err);
+    }
+    setIsExporting(false);
+  };
+
+  const shareAnalysis = async () => {
+    if (!ticker || !analysis) return;
+    const text = `Trade Saarthi Analysis for ${ticker.symbol}\nTrend: ${analysis.trend.direction}\nPrice: ${analysis.price.current}\n\nCheck it out on Trade Saarthi!`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Trade Saarthi: ${ticker.symbol}`,
+          text: text,
+          url: window.location.href,
+        });
+      } catch (err) {
+        console.error("Share failed", err);
+      }
+    } else {
+      navigator.clipboard.writeText(text + "\n" + window.location.href);
+      alert("Link copied to clipboard!");
+    }
+  };
 
   const A = useMemo(() => analysis, [analysis]);
 
@@ -163,33 +294,54 @@ export default function App() {
               className="fixed inset-y-0 left-0 w-[80%] max-w-[320px] bg-bg border-r border-white/10 z-[120] p-6 shadow-2xl"
             >
               <div className="flex items-center justify-between mb-10">
-                <Logo size={32} />
+                <div className="flex items-center gap-3">
+                  <Logo size={32} />
+                  <div className="flex flex-col">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-sm font-bold tracking-tight text-white leading-none">Trade</span>
+                      <div className="text-xs font-medium text-accent">
+                        <SaarthiAnimator />
+                      </div>
+                    </div>
+                    <span className="text-[8px] text-white/40 uppercase tracking-widest font-medium mt-0.5">Built in India for traders across globe</span>
+                  </div>
+                </div>
                 <button onClick={() => setShowMenu(false)} className="text-white/30 p-2"><X size={20} /></button>
               </div>
               
                 <div className="space-y-1">
-                  <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-accent/10 border border-accent/20 text-white text-left group transition-all hover:bg-accent/20">
-                    <div className="w-8 h-8 rounded-xl bg-accent/20 flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
+                  <button 
+                    onClick={() => { setViewMode("technical"); setShowMenu(false); }}
+                    className={`w-full flex items-center gap-3 p-4 rounded-2xl text-left group transition-all ${viewMode === "technical" ? "bg-accent/10 border border-accent/20 text-white" : "hover:bg-white/5 text-white/60"}`}
+                  >
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-transform ${viewMode === "technical" ? "bg-accent/20 text-accent group-hover:scale-110" : "bg-white/5 text-white/40"}`}>
                       <Activity size={18} />
                     </div>
                     <div className="flex flex-col">
                       <span className="text-sm font-bold">Technical Analysis</span>
-                      <span className="text-[10px] text-accent/60 font-medium">Live Market Data</span>
+                      <span className={`text-[10px] font-medium ${viewMode === "technical" ? "text-accent/60" : "text-white/30"}`}>Live Market Data</span>
                     </div>
                   </button>
                   
-                  <div className="w-full flex items-center justify-between p-4 rounded-2xl text-white/20 border border-transparent opacity-60 grayscale">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center">
-                        <PieChart size={18} />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold">Fundamental Analysis</span>
-                        <span className="text-[10px] text-white/20 font-medium">Coming Soon</span>
-                      </div>
+                  <button 
+                    onClick={() => { 
+                      setViewMode("fundamental"); 
+                      if (cat !== "INDIAN_EQUITY" && cat !== "US_EQUITY") {
+                        setCat("INDIAN_EQUITY");
+                        setEx("NSE");
+                      }
+                      setShowMenu(false); 
+                    }}
+                    className={`w-full flex items-center gap-3 p-4 rounded-2xl text-left group transition-all ${viewMode === "fundamental" ? "bg-accent/10 border border-accent/20 text-white" : "hover:bg-white/5 text-white/60"}`}
+                  >
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-transform ${viewMode === "fundamental" ? "bg-accent/20 text-accent group-hover:scale-110" : "bg-white/5 text-white/40"}`}>
+                      <PieChart size={18} />
                     </div>
-                    <Badge type="neutral" xs>Soon</Badge>
-                  </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold">Fundamental Analysis</span>
+                      <span className={`text-[10px] font-medium ${viewMode === "fundamental" ? "text-accent/60" : "text-white/30"}`}>News & Events</span>
+                    </div>
+                  </button>
 
                   <div className="w-full flex items-center justify-between p-4 rounded-2xl text-white/20 border border-transparent opacity-60 grayscale">
                     <div className="flex items-center gap-3">
@@ -229,16 +381,31 @@ export default function App() {
               </button>
             ) : (
               <button 
-                onClick={() => { setTicker(null); setAnalysis(null); }}
+                onClick={() => {
+                  setTicker(null);
+                  setAnalysis(null);
+                  setQ("");
+                  setDs(null);
+                  
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete('symbol');
+                  url.searchParams.delete('id');
+                  url.searchParams.delete('name');
+                  url.searchParams.delete('exchange');
+                  window.history.pushState({ cat }, '', url.toString());
+                }}
                 className="w-9 h-9 rounded-xl glass flex items-center justify-center text-white/60 active:scale-90 transition-transform"
               >
                 <ChevronRight size={18} className="rotate-180" />
               </button>
             )}
             <div className="hidden xs:block">
-              <h1 className="text-sm sm:text-lg font-bold tracking-tight">
-                Trade <SaarthiAnimator />
-              </h1>
+              <div className="flex flex-col">
+                <h1 className="text-sm sm:text-lg font-bold tracking-tight flex items-baseline gap-1.5">
+                  Trade <SaarthiAnimator />
+                </h1>
+                <span className="text-[8px] text-white/40 uppercase tracking-widest font-medium">Built in India for traders across globe</span>
+              </div>
             </div>
           </div>
 
@@ -248,7 +415,9 @@ export default function App() {
           >
             <div className="flex items-center gap-2 overflow-hidden">
               <Search size={14} className="flex-shrink-0 text-white/20 group-hover:text-white/40 transition-colors" />
-              <span className="text-[10px] sm:text-[11px] font-medium tracking-tight truncate">Get Technical Analysis...</span>
+              <span className="text-[10px] sm:text-[11px] font-medium tracking-tight truncate">
+                {viewMode === "fundamental" ? "Search Fundamental Analysis..." : "Get Technical Analysis..."}
+              </span>
             </div>
             <div className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-[9px] font-mono text-white/20">
               <span className="text-[10px]">⌘</span>K
@@ -259,10 +428,28 @@ export default function App() {
         {/* Categories or Analysis Tabs - Sticky Sub-header */}
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
           {!ticker ? (
-            Object.values(CATS).map(c => (
+            Object.values(CATS)
+              .filter(c => viewMode === "technical" || (c.id === "INDIAN_EQUITY" || c.id === "US_EQUITY"))
+              .map(c => (
               <button
                 key={c.id}
-                onClick={() => setCat(c.id as any)}
+                onClick={() => {
+                  setCat(c.id as any);
+                  setEx(CATS[c.id as keyof typeof CATS].exchanges[0]);
+                  setQ("");
+                  setResults([]);
+                  setTicker(null);
+                  setAnalysis(null);
+                  setDs(null);
+                  
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete('symbol');
+                  url.searchParams.delete('id');
+                  url.searchParams.delete('name');
+                  url.searchParams.delete('exchange');
+                  url.searchParams.set('cat', c.id);
+                  window.history.pushState({ cat: c.id }, '', url.toString());
+                }}
                 className={`flex-none flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full text-[10px] sm:text-[11px] font-bold transition-all border ${
                   cat === c.id
                     ? "bg-white text-black border-white"
@@ -334,7 +521,7 @@ export default function App() {
                     autoFocus
                     value={q}
                     onChange={e => setQ(e.target.value)}
-                    placeholder="Get Technical Analysis for any asset..."
+                    placeholder={viewMode === "fundamental" ? "Search Fundamental Analysis for any asset..." : "Get Technical Analysis for any asset..."}
                     className="flex-1 bg-transparent border-none outline-none text-base font-medium placeholder:text-white/10"
                   />
                 </div>
@@ -383,14 +570,23 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {loading ? (
+        {loading && viewMode === "technical" ? (
           <div className="space-y-6 py-4">
             <div className="h-32 bg-white/5 rounded-3xl animate-pulse" />
             <div className="h-64 bg-white/5 rounded-3xl animate-pulse" />
             <div className="h-40 bg-white/5 rounded-3xl animate-pulse" />
           </div>
+        ) : viewMode === "fundamental" ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="pb-32 pt-4"
+          >
+            <FundamentalDashboard cat={cat} ticker={ticker} />
+          </motion.div>
         ) : A && ticker ? (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 py-4">
+          <motion.div ref={analysisRef} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 py-4">
             {/* PRICE CARD - MODERN GRADIENT */}
             <div className="relative p-5 sm:p-6 rounded-[28px] sm:rounded-[32px] bg-gradient-to-br from-white/10 to-transparent border border-white/10 overflow-hidden shadow-2xl">
               <div className="absolute top-0 right-0 w-40 h-40 bg-accent/10 rounded-full blur-[80px] -mr-20 -mt-20" />
@@ -425,13 +621,32 @@ export default function App() {
                       </button>
                     ))}
                   </div>
-                  <button 
-                    onClick={() => ticker && analyze(ticker)}
-                    className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl glass text-[9px] sm:text-[10px] font-bold text-accent hover:bg-white/10 transition-all active:scale-95"
-                  >
-                    <RefreshCw size={10} className={loading ? "animate-spin" : ""} />
-                    RECHECK
-                  </button>
+                  <div className="flex gap-1">
+                    <button 
+                      onClick={shareAnalysis}
+                      className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl glass text-[9px] sm:text-[10px] font-bold text-white/60 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+                      title="Share Analysis"
+                    >
+                      <Share2 size={10} />
+                      <span className="hidden sm:inline">SHARE</span>
+                    </button>
+                    <button 
+                      onClick={exportPDF}
+                      disabled={isExporting}
+                      className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl glass text-[9px] sm:text-[10px] font-bold text-white/60 hover:text-white hover:bg-white/10 transition-all active:scale-95 disabled:opacity-50"
+                      title="Download PDF"
+                    >
+                      <Download size={10} className={isExporting ? "animate-bounce" : ""} />
+                      <span className="hidden sm:inline">PDF</span>
+                    </button>
+                    <button 
+                      onClick={() => ticker && analyze(ticker)}
+                      className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl glass text-[9px] sm:text-[10px] font-bold text-accent hover:bg-white/10 transition-all active:scale-95"
+                    >
+                      <RefreshCw size={10} className={loading ? "animate-spin" : ""} />
+                      RECHECK
+                    </button>
+                  </div>
                 </div>
               </div>
 

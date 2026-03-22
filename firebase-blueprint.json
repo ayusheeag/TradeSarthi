@@ -1,0 +1,32 @@
+{
+  "entities": {
+    "MarketCache": {
+      "title": "MarketCache",
+      "description": "Caches market data and AI suggestions to speed up initial load.",
+      "type": "object",
+      "properties": {
+        "stats": {
+          "type": "string",
+          "description": "JSON stringified array of market stats"
+        },
+        "suggestions": {
+          "type": "string",
+          "description": "JSON stringified array of AI trade suggestions"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Timestamp of the last update"
+        }
+      },
+      "required": ["stats", "suggestions", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/marketCache/{category}": {
+      "schema": {
+        "$ref": "#/entities/MarketCache"
+      },
+      "description": "Stores cached market data per category."
+    }
+  }
+}

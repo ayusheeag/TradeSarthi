@@ -11,8 +11,15 @@ export interface TradeSuggestion {
   reason: string;
 }
 
+const cache: Record<string, { timestamp: number, data: TradeSuggestion[] }> = {};
+
 export const geminiService = {
   getTradeSuggestions: async (category: string, data: any[]): Promise<TradeSuggestion[]> => {
+    const now = Date.now();
+    if (cache[category] && now - cache[category].timestamp < 15 * 60 * 1000) {
+      return cache[category].data;
+    }
+
     try {
       const marketContext = data.map(d => `${d.symbol}: Price ${d.price}, Change ${d.changePct.toFixed(2)}%`).join("; ");
       const response = await ai.models.generateContent({
@@ -40,7 +47,9 @@ export const geminiService = {
         }
       });
 
-      return JSON.parse(response.text || "[]");
+      const parsed = JSON.parse(response.text || "[]");
+      cache[category] = { timestamp: now, data: parsed };
+      return parsed;
     } catch (e) {
       console.error("Gemini Error:", e);
       return [];

@@ -139,6 +139,36 @@ async function startServer() {
     }
   });
 
+  // Proxy for BSE Announcements
+  app.get("/api/bse/announcements", async (req, res) => {
+    try {
+      const { pageno, strCat, strPrevDate, strToDate, strType, subcategory } = req.query;
+      const url = new URL("https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w");
+      if (pageno) url.searchParams.append("pageno", pageno as string);
+      if (strCat) url.searchParams.append("strCat", strCat as string);
+      if (strPrevDate) url.searchParams.append("strPrevDate", strPrevDate as string);
+      if (strToDate) url.searchParams.append("strToDate", strToDate as string);
+      if (strType) url.searchParams.append("strType", strType as string);
+      if (subcategory) url.searchParams.append("subcategory", subcategory as string);
+      url.searchParams.append("strScrip", "");
+      url.searchParams.append("strSearch", "P");
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+          "Accept": "application/json, text/plain, */*",
+          "Origin": "https://www.bseindia.com",
+          "Referer": "https://www.bseindia.com/"
+        }
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("BSE API Error:", error);
+      res.status(500).json({ error: "Failed to fetch BSE announcements" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

@@ -6,6 +6,8 @@ import { Badge } from "./UI";
 import { logoService } from "../services/logoService";
 import { TrendingUp, TrendingDown, Target, Activity, RefreshCw, ChevronRight, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { db, handleFirestoreError, OperationType } from "../firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 interface MarketDashboardProps {
   cat: string;
@@ -17,12 +19,37 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
   const [stats, setStats] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<TradeSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setSuggestionsLoading(true);
     setError("");
+    
+    let cacheSnap;
+    const cacheRef = doc(db, 'marketCache', cat);
     try {
+      cacheSnap = await getDoc(cacheRef);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, `marketCache/${cat}`);
+    }
+
+    try {
+      const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
+      const now = Date.now();
+
+      if (cacheSnap && cacheSnap.exists()) {
+        const cacheData = cacheSnap.data();
+        if (now - cacheData.updatedAt < CACHE_DURATION) {
+          setStats(JSON.parse(cacheData.stats));
+          setSuggestions(JSON.parse(cacheData.suggestions));
+          setLoading(false);
+          setSuggestionsLoading(false);
+          return;
+        }
+      }
+
       let data: any[] = [];
       if (cat === "INDIAN_EQUITY") {
         data = await dataAdapter.getNSEGainersLosers();
@@ -31,16 +58,28 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
         data = await dataAdapter.getWatchlistStats(symbols, source);
       }
       setStats(data);
+      setLoading(false);
 
       // Fetch suggestions using the live stats
       if (data.length > 0) {
         const trades = await geminiService.getTradeSuggestions(cat, data.slice(0, 10));
         setSuggestions(trades);
+        
+        try {
+          await setDoc(cacheRef, {
+            stats: JSON.stringify(data),
+            suggestions: JSON.stringify(trades),
+            updatedAt: now
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `marketCache/${cat}`);
+        }
       }
     } catch (e) {
       setError("Failed to load market data");
     }
     setLoading(false);
+    setSuggestionsLoading(false);
   }, [cat, source]);
 
   useEffect(() => {
@@ -202,7 +241,12 @@ export const MarketDashboard: React.FC<MarketDashboardProps> = ({ cat, source, o
           <Badge type="info" xs>AI</Badge>
         </div>
         <div className="grid grid-cols-1 gap-4">
-          {suggestions.length > 0 ? suggestions.map((t, i) => (
+          {suggestionsLoading ? (
+            <>
+              <div className="h-48 bg-white/5 rounded-[24px] sm:rounded-[32px] animate-pulse" />
+              <div className="h-48 bg-white/5 rounded-[24px] sm:rounded-[32px] animate-pulse" />
+            </>
+          ) : suggestions.length > 0 ? suggestions.map((t, i) => (
             <div key={i} className="p-4 sm:p-5 rounded-[24px] sm:rounded-[32px] bg-white/5 border border-white/10 space-y-3 sm:space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 sm:gap-3">

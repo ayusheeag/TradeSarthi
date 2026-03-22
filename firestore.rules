@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: marketCache
+    // Document ID: {category} (e.g., INDIAN_EQUITY, US_EQUITY)
+    // Fields:
+    //   - stats: string (required, max 100000 chars) - JSON stringified array of market stats
+    //   - suggestions: string (required, max 100000 chars) - JSON stringified array of AI trade suggestions
+    //   - updatedAt: number (required, positive) - Timestamp of the last update
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function hasOnlyAllowedFields(allowedFields) {
+      return request.resource.data.keys().hasOnly(allowedFields);
+    }
+    
+    function isValidMarketCache() {
+      return hasOnlyAllowedFields(['stats', 'suggestions', 'updatedAt']) &&
+             request.resource.data.stats is string &&
+             request.resource.data.stats.size() < 500000 &&
+             request.resource.data.suggestions is string &&
+             request.resource.data.suggestions.size() < 500000 &&
+             request.resource.data.updatedAt is number &&
+             request.resource.data.updatedAt > 0;
+    }
+
+    match /marketCache/{category} {
+      // Publicly readable to speed up first page load as requested by user
+      allow read: if true;
+      // Allow public writes but strictly validate the schema and size limits
+      allow create: if isValidMarketCache();
+      allow update: if isValidMarketCache() && request.resource.data.updatedAt > resource.data.updatedAt;
+    }
+  }
+}

@@ -83,14 +83,8 @@ export const Dot = ({ on }: { on: boolean }) => (
 const SAARTHI_LANGS = [
   { text: "Saarthi", lang: "English" },
   { text: "सारथी", lang: "Hindi" },
-  { text: "சாரதி", lang: "Tamil" },
-  { text: "ಸಾರಥಿ", lang: "Kannada" },
-  { text: "సారథి", lang: "Telugu" },
-  { text: "સાર્થિ", lang: "Gujarati" },
-  { text: "ਸਾਰਥੀ", lang: "Punjabi" },
-  { text: "সারথি", lang: "Bengali" },
-  { text: "സാരഥി", lang: "Malayalam" },
   { text: "सारथी", lang: "Marathi" },
+  { text: "સારથી", lang: "Gujarati" },
 ];
 
 export function SaarthiAnimator() {
