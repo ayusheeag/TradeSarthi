@@ -29,7 +29,8 @@ export default function App() {
 
   // Intersection Observer for active tab highlighting
   useEffect(() => {
-    if (!ticker || !analysis) return;
+    if (!ticker) return;
+    if (viewMode === "technical" && !analysis) return;
     
     const options = {
       root: null,
@@ -45,14 +46,17 @@ export default function App() {
       });
     }, options);
 
-    const sectionIds = ["overview", "classic", "smc", "levels", "patterns"];
+    const sectionIds = viewMode === "fundamental" 
+      ? ["overview", "pl-analysis", "swot", "shareholders", "news"]
+      : ["overview", "classic", "smc", "levels", "patterns"];
+      
     sectionIds.forEach((id) => {
       const el = document.getElementById(id);
       if (el) observer.observe(el);
     });
 
     return () => observer.disconnect();
-  }, [ticker, analysis]);
+  }, [ticker, analysis, viewMode]);
   const [ds, setDs] = useState<{ live: boolean; src: string; n: number; why?: string } | null>(null);
   const dbRef = useRef<any>(null);
 
@@ -226,8 +230,14 @@ export default function App() {
       const canvas = await html2canvas(analysisRef.current, {
         scale: 2,
         useCORS: true,
+        logging: false,
         backgroundColor: "#050505"
       });
+      
+      if (canvas.width === 0 || canvas.height === 0) {
+        throw new Error("Canvas is empty");
+      }
+      
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -468,13 +478,19 @@ export default function App() {
             ))
           ) : (
             <div className="flex w-full bg-white/5 p-1 rounded-xl border border-white/5">
-              {[
+              {(viewMode === "fundamental" ? [
+                { id: "overview", icon: Activity, label: "Overview" },
+                { id: "pl-analysis", icon: BarChart3, label: "P&L Analysis" },
+                { id: "swot", icon: Layers, label: "SWOT" },
+                { id: "shareholders", icon: Target, label: "Shareholders" },
+                { id: "news", icon: TrendingUp, label: "News" }
+              ] : [
                 { id: "overview", icon: Activity, label: "Overview" },
                 { id: "classic", icon: BarChart3, label: "Classic" },
                 { id: "smc", icon: Layers, label: "SMC/ICT" },
                 { id: "levels", icon: Target, label: "Levels" },
                 { id: "patterns", icon: TrendingUp, label: "Patterns" }
-              ].map(t => (
+              ]).map(t => (
                 <button 
                   key={t.id}
                   onClick={() => {
@@ -586,8 +602,9 @@ export default function App() {
             <FundamentalDashboard cat={cat} ticker={ticker} />
           </motion.div>
         ) : A && ticker ? (
-          <motion.div ref={analysisRef} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 py-4">
-            {/* PRICE CARD - MODERN GRADIENT */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 py-4">
+            <div ref={analysisRef} className="space-y-6 bg-[#050505] p-2 -m-2 rounded-3xl">
+              {/* PRICE CARD - MODERN GRADIENT */}
             <div className="relative p-5 sm:p-6 rounded-[28px] sm:rounded-[32px] bg-gradient-to-br from-white/10 to-transparent border border-white/10 overflow-hidden shadow-2xl">
               <div className="absolute top-0 right-0 w-40 h-40 bg-accent/10 rounded-full blur-[80px] -mr-20 -mt-20" />
               
@@ -598,6 +615,7 @@ export default function App() {
                       src={logoService.getLogoUrl(ticker.symbol, cat)} 
                       alt="" 
                       className="w-full h-full object-contain" 
+                      crossOrigin="anonymous"
                       referrerPolicy="no-referrer"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${ticker.symbol}&backgroundColor=151619`;
@@ -897,6 +915,7 @@ export default function App() {
               </section>
             </div>
 
+            </div>
             <footer className="text-center py-12 opacity-20">
               <div className="text-[9px] font-bold uppercase tracking-[0.4em]">Trade Saarthi v2.0 · Pro Grade Analysis</div>
             </footer>
@@ -912,7 +931,7 @@ export default function App() {
 
       {/* BOTTOM NAVIGATION - ERGONOMIC PILL */}
       <AnimatePresence>
-        {ticker && analysis && (
+        {ticker && (viewMode === "fundamental" || analysis) && (
           <motion.div 
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}

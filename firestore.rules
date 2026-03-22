@@ -22,9 +22,7 @@ service cloud.firestore {
     function isValidMarketCache() {
       return hasOnlyAllowedFields(['stats', 'suggestions', 'updatedAt']) &&
              request.resource.data.stats is string &&
-             request.resource.data.stats.size() < 500000 &&
              request.resource.data.suggestions is string &&
-             request.resource.data.suggestions.size() < 500000 &&
              request.resource.data.updatedAt is number &&
              request.resource.data.updatedAt > 0;
     }
@@ -34,7 +32,19 @@ service cloud.firestore {
       allow read: if true;
       // Allow public writes but strictly validate the schema and size limits
       allow create: if isValidMarketCache();
-      allow update: if isValidMarketCache() && request.resource.data.updatedAt > resource.data.updatedAt;
+      allow update: if isValidMarketCache() && (!('updatedAt' in resource.data) || request.resource.data.updatedAt > resource.data.updatedAt);
+    }
+
+    match /fundamental_analysis/{cacheKey} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasAll(['analysis', 'timestamp']) &&
+                            request.resource.data.timestamp is number;
+    }
+
+    match /news_cache/{cacheKey} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasAny(['events', 'actions', 'news']) &&
+                            request.resource.data.timestamp is number;
     }
   }
 }

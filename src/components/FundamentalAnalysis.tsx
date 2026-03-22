@@ -59,9 +59,9 @@ export const FundamentalAnalysis: React.FC<FundamentalAnalysisProps> = ({ ticker
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" id="fundamental-analysis-container">
       {/* RATING & METRICS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div id="overview" className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="glass p-5 rounded-3xl flex flex-col items-center justify-center text-center relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-accent/10 rounded-full blur-[40px] -mr-16 -mt-16" />
           <div className="text-[10px] text-white/40 font-bold uppercase tracking-widest mb-2">AI Rating</div>
@@ -108,7 +108,7 @@ export const FundamentalAnalysis: React.FC<FundamentalAnalysisProps> = ({ ticker
       </div>
 
       {/* CHARTS */}
-      <div className="glass p-5 rounded-3xl">
+      <div id="pl-analysis" className="glass p-5 rounded-3xl">
         <div className="flex items-center justify-between mb-6">
           <div className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Financial Trends (5Y)</div>
           <div className="flex gap-1 bg-white/5 p-1 rounded-lg">
@@ -140,14 +140,14 @@ export const FundamentalAnalysis: React.FC<FundamentalAnalysisProps> = ({ ticker
                 contentStyle={{ backgroundColor: '#151619', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '12px' }}
                 itemStyle={{ color: '#fff', fontWeight: 'bold' }}
               />
-              <Area type="monotone" dataKey="value" stroke="#3B82F6" strokeWidth={2} fillOpacity={1} fill="url(#colorValue)" />
+              <Area type="monotone" dataKey="value" stroke="#3B82F6" strokeWidth={2} fillOpacity={1} fill="url(#colorValue)" isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       {/* PROS & CONS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div id="swot" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="glass p-5 rounded-3xl border border-bull/20 bg-bull/5">
           <div className="flex items-center gap-2 mb-4 text-bull">
             <CheckCircle size={16} />
@@ -203,7 +203,7 @@ export const FundamentalAnalysis: React.FC<FundamentalAnalysisProps> = ({ ticker
       </div>
 
       {/* HOLDING PATTERN */}
-      <div className="glass p-5 rounded-3xl">
+      <div id="shareholders" className="glass p-5 rounded-3xl">
         <div className="text-[10px] text-white/40 font-bold uppercase tracking-widest mb-6">Holding Pattern</div>
         <div className="flex flex-col sm:flex-row items-center gap-8">
           <div className="w-48 h-48 relative">
@@ -218,6 +218,7 @@ export const FundamentalAnalysis: React.FC<FundamentalAnalysisProps> = ({ ticker
                   paddingAngle={5}
                   dataKey="value"
                   stroke="none"
+                  isAnimationActive={false}
                 >
                   {holdingData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -262,7 +263,7 @@ export const FundamentalAnalysis: React.FC<FundamentalAnalysisProps> = ({ ticker
       </div>
 
       {/* NEWS */}
-      <div className="glass p-5 rounded-3xl">
+      <div id="news" className="glass p-5 rounded-3xl">
         <div className="text-[10px] text-white/40 font-bold uppercase tracking-widest mb-4">Latest News</div>
         <div className="space-y-4">
           {data.news.map((n, i) => (

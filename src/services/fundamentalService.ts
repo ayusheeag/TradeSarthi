@@ -1,6 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import { db } from "../firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export interface FundamentalData {
   rating: {
@@ -40,10 +42,27 @@ export interface FundamentalData {
 
 export const fundamentalService = {
   async getFundamentalData(symbol: string, exchange: string): Promise<FundamentalData> {
+    const cacheKey = `${symbol}_${exchange}`.replace(/[^a-zA-Z0-9_]/g, "_");
+    const docRef = doc(db, "fundamental_analysis", cacheKey);
+    
+    try {
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        // Cache for 24 hours
+        if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
+          return data.analysis as FundamentalData;
+        }
+      }
+    } catch (err) {
+      console.error("Error reading from cache:", err);
+    }
+
+    const today = new Date().toISOString().split('T')[0];
     const prompt = `Generate realistic fundamental analysis data for the stock ${symbol} listed on ${exchange}.
+    Use the latest available data as of ${today}. Ensure the data is up-to-date and reflects the current fundamental profile of this stock.
     Provide the data in JSON format matching the schema.
-    Ensure the data is realistic and reflects the typical fundamental profile of this stock.
-    For charts, provide 5 years of quarterly data (20 data points) for revenue, opm (Operating Profit Margin %), and netProfit.
+    For charts, provide 5 years of quarterly data (20 data points) for revenue, opm (Operating Profit Margin %), and netProfit ending in the most recent quarter.
     `;
 
     const response = await ai.models.generateContent({
@@ -174,6 +193,17 @@ export const fundamentalService = {
 
     const text = response.text;
     if (!text) throw new Error("No response from Gemini");
-    return JSON.parse(text) as FundamentalData;
+    const parsedData = JSON.parse(text) as FundamentalData;
+    
+    try {
+      await setDoc(docRef, {
+        analysis: parsedData,
+        timestamp: Date.now()
+      });
+    } catch (err) {
+      console.error("Error writing to cache:", err);
+    }
+    
+    return parsedData;
   }
 };
