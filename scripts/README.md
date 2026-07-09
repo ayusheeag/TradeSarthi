@@ -4,7 +4,8 @@
 
 Downloads historical OHLCV candles from Bybit's **public** market-data API
 (`/v5/market/kline`). Zero dependencies — just Node 18+ (uses the built-in
-global `fetch`).
+global `fetch`; Excel output uses a small self-contained `.xlsx` writer in
+`lib/xlsx.mjs`, no npm install required).
 
 ### Quick start
 
@@ -15,14 +16,16 @@ npm run download:bybit
 node scripts/download-bybit-ohlcv.mjs
 ```
 
-CSVs are written to `data/bybit/<SYMBOL>_<INTERVAL>m.csv` with columns:
+By default each symbol is written to both an Excel file and a CSV under
+`data/bybit/` — `<SYMBOL>_<INTERVAL>m.xlsx` and `<SYMBOL>_<INTERVAL>m.csv`
+(use `--format xlsx` or `--format csv` for just one). Columns:
 
 ```
 timestamp,datetime,open,high,low,close,volume,turnover
 ```
 
 `timestamp` is the candle open time in Unix milliseconds; `datetime` is the same
-instant as ISO-8601 UTC.
+instant as ISO-8601 UTC. In the `.xlsx`, numeric columns are real numbers.
 
 ### Options
 
@@ -32,6 +35,7 @@ instant as ISO-8601 UTC.
 | `--days`     | `60`                                         | Look-back window |
 | `--interval` | `1`                                          | Bybit interval: `1,3,5,15,30,60,120,240,360,720,D,W,M` |
 | `--category` | `auto`                                       | `auto` probes `spot` → `linear` → `inverse`; or force `spot`/`linear`/`inverse` |
+| `--format`   | `both`                                       | `xlsx`, `csv`, or `both` |
 | `--out`      | `data/bybit`                                 | Output directory |
 | `--base`     | `https://api.bybit.com`                      | Use `https://api.bytick.com` if the primary host is blocked |
 
