@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Downloaded market data (can be large; regenerate with npm run download:bybit)
+data/
