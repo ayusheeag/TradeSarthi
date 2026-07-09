@@ -15,6 +15,21 @@ async function bnSymbols() {
   } catch { return []; }
 }
 
+let _bybitCache: any[] | null = null, _bybitCacheT = 0;
+
+async function bybitSymbols() {
+  if (_bybitCache && Date.now() - _bybitCacheT < 3600000) return _bybitCache;
+  try {
+    const r = await fetch("https://api.bybit.com/v5/market/instruments-info?category=spot");
+    if (!r.ok) throw 0;
+    const d = await r.json();
+    if (d.retCode !== 0) throw 0;
+    _bybitCache = (d.result?.list || []).filter((s: any) => s.quoteCoin === "USDT" && s.status === "Trading");
+    _bybitCacheT = Date.now();
+    return _bybitCache;
+  } catch { return []; }
+}
+
 export function demoTickers(cat: string, q: string): Ticker[] {
   const T: Record<string, any[]> = {
     INDIAN_EQUITY: [{ symbol: "RELIANCE.NS", name: "Reliance Industries", exchange: "NSE" }, { symbol: "TCS.NS", name: "Tata Consultancy Services", exchange: "NSE" }, { symbol: "HDFCBANK.NS", name: "HDFC Bank", exchange: "NSE" }, { symbol: "INFY.NS", name: "Infosys", exchange: "NSE" }, { symbol: "ICICIBANK.NS", name: "ICICI Bank", exchange: "NSE" }, { symbol: "SBIN.NS", name: "State Bank of India", exchange: "NSE" }, { symbol: "BHARTIARTL.NS", name: "Bharti Airtel", exchange: "NSE" }, { symbol: "ITC.NS", name: "ITC Limited", exchange: "NSE" }, { symbol: "TATAMOTORS.NS", name: "Tata Motors", exchange: "NSE" }, { symbol: "WIPRO.NS", name: "Wipro", exchange: "NSE" }, { symbol: "AXISBANK.NS", name: "Axis Bank", exchange: "NSE" }, { symbol: "BAJFINANCE.NS", name: "Bajaj Finance", exchange: "NSE" }, { symbol: "LT.NS", name: "Larsen & Toubro", exchange: "NSE" }, { symbol: "MARUTI.NS", name: "Maruti Suzuki", exchange: "NSE" }, { symbol: "TITAN.NS", name: "Titan Company", exchange: "NSE" }],
@@ -279,8 +294,11 @@ export const dataAdapter = {
   BINANCE: {
     search: async (q: string) => {
       const syms = await bnSymbols(); const u = q.toUpperCase();
-      return syms.filter((s: any) => s.symbol.includes(u) || s.baseAsset.includes(u)).slice(0, 12)
+      const results = syms.filter((s: any) => s.symbol.includes(u) || s.baseAsset.includes(u)).slice(0, 12)
         .map((s: any) => ({ symbol: s.symbol, name: `${s.baseAsset}/USDT`, exchange: "Binance", id: s.symbol }));
+      // Binance is geoblocked in some regions and doesn't list every token — fall back to Bybit.
+      if (results.length === 0) return dataAdapter.BYBIT.search(q);
+      return results;
     },
     ohlc: async (sym: string, ex: string, tf: string) => {
       const iMap: any = { "5m": "5m", "15m": "15m", "1H": "1h", "4H": "4h", "1D": "1d", "1W": "1w" };
@@ -288,7 +306,31 @@ export const dataAdapter = {
       try {
         const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${iMap[tf] || "1d"}&limit=${lMap[tf] || 200}`);
         if (!r.ok) throw 0;
-        return (await r.json()).map((k: any) => ({ time: k[0], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] }));
+        const rows = (await r.json()).map((k: any) => ({ time: k[0], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] }));
+        if (!rows.length) throw 0;
+        return rows;
+      } catch { return dataAdapter.BYBIT.ohlc(sym, ex, tf); }
+    },
+  },
+  BYBIT: {
+    search: async (q: string) => {
+      const syms = await bybitSymbols(); const u = q.toUpperCase();
+      return syms.filter((s: any) => s.symbol.includes(u) || s.baseCoin.includes(u)).slice(0, 12)
+        .map((s: any) => ({ symbol: s.symbol, name: `${s.baseCoin}/USDT`, exchange: "Bybit", id: s.symbol }));
+    },
+    ohlc: async (sym: string, ex: string, tf: string) => {
+      // Bybit v5 kline intervals are expressed in minutes (or D/W); newest-first.
+      const iMap: any = { "5m": "5", "15m": "15", "1H": "60", "4H": "240", "1D": "D", "1W": "W" };
+      const lMap: any = { "5m": 500, "15m": 500, "1H": 500, "4H": 300, "1D": 365, "1W": 200 };
+      try {
+        const r = await fetch(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${sym}&interval=${iMap[tf] || "D"}&limit=${lMap[tf] || 200}`);
+        if (!r.ok) throw 0;
+        const d = await r.json();
+        if (d.retCode !== 0) throw 0;
+        // row: [start, open, high, low, close, volume, turnover] — reverse to ascending time.
+        return (d.result?.list || [])
+          .map((k: any) => ({ time: +k[0], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] }))
+          .reverse();
       } catch { return null; }
     },
   },
